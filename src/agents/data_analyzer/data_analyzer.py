@@ -110,7 +110,7 @@ class DataAnalyzer(BaseAgent):
     async def _prepare_init_prompt(self, input_data: dict) -> list[dict]:
         task = input_data['task']
         enable_chart = input_data['enable_chart']
-        collect_data_list = self.memory.get_collect_data()
+        collect_data_list = self.memory.get_collect_data(exclude_type=['search', 'click'])
         analysis_task = f"Global Research Objective: {task}\n\nAnalysis Task: {input_data['analysis_task']}"
         data_info = await self._format_collect_data(analysis_task, collect_data_list)
 
@@ -483,8 +483,11 @@ class DataAnalyzer(BaseAgent):
             await self.save(state={'finished': False, 'current_phase': self.current_phase, 'phase1_result': run_result}, checkpoint_name=checkpoint_name)
         else:
             run_result = self.current_checkpoint.get('phase1_result', {})
-        final_result = run_result['final_result']
-        
+        try:
+            final_result = run_result['final_result']
+        except:
+            print(run_result)
+            assert False
         # Parse the generated analysis report
         if self.current_phase == 'phase2':
             report_title, report_content = self._parse_generated_report(final_result)

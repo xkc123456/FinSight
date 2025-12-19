@@ -69,17 +69,16 @@ class ToolResult:
         base_string += f"Data type: {type(self.data)}\n"
         if isinstance(self.data, pd.DataFrame):
             format_string = ""
-
             format_string += f"First five rows:\n{self.data.head().to_string()}\n"
         elif isinstance(self.data, dict):
             format_string = "Partial data preview: "
-            format_string += str(self.data)[:500]
+            format_string += str(self.data)[:100]
         elif isinstance(self.data, list):
             format_string = "Partial data preview: "
-            format_string += str(self.data)[:500]
+            format_string += str(self.data)[:100]
         else:
             format_string = "Partial data preview: "
-            format_string += str(self.data)[:500]
+            format_string += str(self.data)[:100]
 
         return base_string + format_string
 

@@ -221,6 +221,11 @@ class ClickResult(ToolResult):
         format_output = self.name + "\n" + self.description + "\n\n"
         format_output += f"Content: {self.data}"
         return format_output
+    
+    def brief_str(self):
+        format_output = self.name + "\n" + self.description + "\n\n"
+        format_output += f"Content: {self.data[:100]}"
+        return format_output
 
     def __repr__(self):
         return self.__str__()

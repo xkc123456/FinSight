@@ -16,6 +16,7 @@ from src.agents.base_agent import BaseAgent
 from src.utils.logger import get_logger
 from src.utils.prompt_loader import get_prompt_loader
 from src.tools.web.base_search import SearchResult
+from src.tools.web.web_crawler import ClickResult
 from src.agents.search_agent.search_agent import DeepSearchResult
 
 
@@ -325,14 +326,24 @@ class Memory:
     def get_log_by_type(self, input_type: str):
         return [item for item in self.log if input_type in item['type']]
 
+    def get_url_title(self, url: str):
+        # select search result in data
+        search_result = [item for item in self.data if isinstance(item, SearchResult)]
+        url2title = {}
+        for item in search_result:
+            url2title[item.link] = item.name
+        return url2title.get(url, '')
 
-    def get_collect_data(self, exclude_type: str = None):
+    def get_collect_data(self, exclude_type: List[str] = []):
         collected_data = [item for item in self.data if isinstance(item, ToolResult)]
         collected_data = [item for item in collected_data if not isinstance(item, DeepSearchResult)]
         
-        if exclude_type is not None:
-            if exclude_type == 'search':
-                collected_data = [item for item in collected_data if not isinstance(item, SearchResult)]
+        if exclude_type != []:
+            for exclude_type_item in exclude_type:
+                if exclude_type_item == 'search':
+                    collected_data = [item for item in collected_data if not isinstance(item, SearchResult)]
+                elif exclude_type_item == 'click':
+                    collected_data = [item for item in collected_data if not isinstance(item, ClickResult)]
         return collected_data
     
     def get_analysis_result(self):

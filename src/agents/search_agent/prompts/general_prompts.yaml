@@ -47,13 +47,16 @@ deep_search: |
      - Each paragraph should contain concrete information, not vague generalizations.
      - Include quantified data points wherever available (percentages, dollar amounts, dates, counts).
      - Name specific companies, products, events, or studies when discussing examples.
-     
-     **CITATION REQUIREMENTS (CRITICAL - STRICTLY ENFORCED):**
-     - **Comprehensiveness of citations**: Try to include all information used in the reference as much as possible.
-     - **Per-paragraph citations**: Every paragraph containing factual claims MUST have at least one inline citation [N]. Aim for 2-3 citations per paragraph when multiple facts are presented.
-     - **Specific citations**: Each distinct piece of information should cite its specific source - do NOT cluster multiple unrelated facts under one citation.
-     - **Source diversity**: Avoid over-relying on a single source. No single source should account for more than 20% of your citations.
-     - **Citation format**: Use `[Source: Title of Page/Report]` format inline, then list full URLs in References section.
+
+      **CITATION REQUIREMENTS (CRITICAL - STRICTLY ENFORCED):**
+      1. **Comprehensiveness of citations**: Try to include all information used in the reference as much as possible.
+      1. **Inline Citations**: Use numbered brackets `[N]` (e.g., [1], [2]) in the text immediately following the fact, statistic, or claim being supported.
+      2. **References Section**: At the end of the report, you MUST include a section titled `## References`.
+         - Format: `[N] Source Title - <URL>`
+         - Every inline number `[N]` must have a corresponding entry in the References section.
+         - The URL is MANDATORY.
+      3. **Source Authenticity**: You may ONLY cite URLs that were explicitly returned by the search results or webpage. NEVER fabricate, guess, or construct URLs.
+      4. **No Meta-Commentary**: In the final report, do NOT include phrases like "I found...", "The tool returned...", or "Here is the data...". State facts directly (e.g., "Revenue increased by 20% in 2023 [1].").
      
      **SOURCE AUTHENTICITY RULES:**
      - You may ONLY cite URLs that appeared in your search results or pages you browsed during this session.
