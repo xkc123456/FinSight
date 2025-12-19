@@ -390,8 +390,10 @@ class BaseAgent:
         raise NotImplementedError
     
 
-    def _agent_tool_function(self, tool_name: str, **kwargs):
+    def _agent_tool_function(self, tool_name: str = None, **kwargs):
         """Execute a tool by name."""
+        if tool_name is None:
+            raise ValueError("tool_name is required")
         target_tool = None
         for tool in self.tools:
             if isinstance(tool, Tool):

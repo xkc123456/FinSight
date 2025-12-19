@@ -274,6 +274,7 @@ class AsyncCodeExecutor:
                 # Capture exec-level exceptions
                 has_error = True
                 stderr_capture.write(traceback.format_exc())
+                print("error code: code = \n", code)
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, sync_exec)
