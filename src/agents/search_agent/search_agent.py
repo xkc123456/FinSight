@@ -100,27 +100,26 @@ class DeepSearchAgent(BaseAgent):
                 result = f"Search results for `{action_content}`\n"
                 
                 for idx, item in enumerate(search_result):
-                    if isinstance(item, dict):
-                        title = item.name
-                        link = item.link
-                        description = item.description
-                        search_result_list.append({
-                            'query': action_content,
-                            'title': title,
-                            'link': link,
-                            'description': description
-                        })
-                        self.link2name[link] = title
-                        # Track this as a valid link for later validation
-                        self.valid_links[link] = {
-                            'title': title,
-                            'description': description,
-                            'query': action_content
-                        }
-                        result += 'Result ' + str(idx + 1) + ':\n'
-                        result += f"Title: {title}\n"
-                        result += f"Link: {link}\n"
-                        result += f"Summary: {description}\n\n"
+                    title = item.name
+                    link = item.link
+                    description = item.description
+                    search_result_list.append({
+                        'query': action_content,
+                        'title': title,
+                        'link': link,
+                        'description': description
+                    })
+                    self.link2name[link] = title
+                    # Track this as a valid link for later validation
+                    self.valid_links[link] = {
+                        'title': title,
+                        'description': description,
+                        'query': action_content
+                    }
+                    result += 'Result ' + str(idx + 1) + ':\n'
+                    result += f"Title: {title}\n"
+                    result += f"Link: {link}\n"
+                    result += f"Summary: {description}\n\n"
             for search_item in search_result:
                 self.memory.add_data(search_item)
             self.memory.add_log(
