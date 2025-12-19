@@ -419,9 +419,17 @@ class BaseAgent:
                 return response
             elif issubclass(type(target_tool), Tool):
                 response = asyncio.run(target_tool.api_function(**kwargs))
-                response = [item.data for item in response]
+                sources = [item.source for item in response]
+                data_list = [item.data for item in response]
+                sources = "\n".join(sources)
+                import sys
+                display_note = f"[Tool Result Overview] Gather {len(response)} Tool Results.\n"
+                for i, item in enumerate(response):
+                    display_note += f"-{i}. Name: {item.name}\nSource: {item.source}\n"
+                print(f"\n\n{display_note}\n\n", file=sys.stdout, flush=True)
+
                 self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
-                return response
+                return data_list
             else:
                 self.logger.warning(f"Unknown tools: {tool_name}")
                 self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Unknown tools: {tool_name}")
@@ -501,9 +509,10 @@ class BaseAgent:
                 self.logger.info(f"Action result this step: {action_result['result']}")
                 self.logger.info("--------")
             conversation_history.append({"role": "assistant", "content": action_result['llm_response']})
-            print("***************************")
-            print(action_result['result'])
             conversation_history.append({"role": "user", "content": action_result['result']})
+            self.logger.debug("--Begin of Execution Result--")
+            self.logger.debug(action_result['result'])
+            self.logger.debug("--End of Execution Result--")
 
             # Save each iteration to support resume
             current_state = {
@@ -624,6 +633,8 @@ class BaseAgent:
                 feedback.append("New variables:")
                 for var_name, var_info in result["variables"].items():
                     feedback.append(f"  - {var_name}: {var_info}")
+            if result.get("additional_notes"):
+                feedback.append(f"Additional notes: {result['additional_notes']}\n")
         else:
             feedback.append("Code execution: failed\n")
             if result["stderr"]:

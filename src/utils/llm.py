@@ -118,7 +118,6 @@ class AsyncLLM:
                     stop_reason = response.choices[0].provider_specific_fields['stop_reason']
                 except:
                     stop_reason = None
-                print("stop_reason", stop_reason)
                 if include_stop_string and stop_reason is not None:
                     output += stop_reason
                     

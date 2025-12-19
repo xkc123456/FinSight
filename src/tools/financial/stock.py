@@ -162,7 +162,7 @@ class StockPrice(Tool):
             name="Stock candlestick data",
             description="Daily OHLCV data including turnover and rate-of-change metrics.",
             parameters=[
-                {"name": "stock_code", "type": "str", "description": "Ticker, e.g., 000001", "required": True},
+                {"name": "stock_code", "type": "str", "description": "Ticker/Stock Code (support A-share and HK-share), e.g., 000001", "required": True},
             ],
         )
 
