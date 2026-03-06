@@ -193,32 +193,6 @@ class ReportGenerator(BaseAgent):
             'continue': True,
         }
     
-    async def _handle_report_action(self, action_content: str):
-        """Handle a 'final/report' action."""
-        return {
-            "action": "report",
-            "action_content": action_content,
-            "result": action_content,
-            "continue": False,
-        }
-    async def _handle_outline_action(self, action_content: str):
-        """Handle a 'outline' action."""
-        return {
-            "action": "outline",
-            "action_content": action_content,
-            "result": action_content,
-            "continue": False,
-        }
-    
-    async def _handle_draft_action(self, action_content: str):
-        """Handle a 'outline' action."""
-        return {
-            "action": "draft",
-            "action_content": action_content,
-            "result": action_content,
-            "continue": False,
-        }
-    
     async def _final_polish(self, section_input_data, draft_section: str):
         all_analysis_result = self.memory.get_analysis_result()
         all_image_list = []
@@ -381,12 +355,12 @@ class ReportGenerator(BaseAgent):
         for keyword, display_name in table_configs:
             target_item_list = [item for item in collect_data_list if keyword in item.name and stock_code in item.name]
             if len(target_item_list) == 0:
-                print(f"No {display_name} data found")
+                self.logger.warning("No %s data found", display_name)
                 continue
             else:
                 table_data = target_item_list[0].data
                 if table_data is None:
-                    print(f"{display_name} data is empty, skip formatting")
+                    self.logger.warning("%s data is empty, skip formatting", display_name)
                     continue
                     
                 if keyword in ["Income statement", "Balance sheet", "Cash-flow statement"]:
@@ -623,7 +597,7 @@ class ReportGenerator(BaseAgent):
             ]
             if os.path.exists(media_dir):
                 pandoc_cmd.append(f"--extract-media={media_dir}")
-            print(" ".join(pandoc_cmd))
+            self.logger.info("Pandoc command: %s", " ".join(pandoc_cmd))
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'
             subprocess.run(pandoc_cmd, check=True, capture_output=True, text=True, encoding='utf-8', env=env)

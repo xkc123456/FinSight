@@ -7,9 +7,8 @@ from src.utils.logger import get_logger, setup_logger
 __all__ = [
     "LLM",
     "AsyncLLM",
-    "CodeExecutor",
     "AsyncCodeExecutor",
     "IndexBuilder",
     "get_logger",
-    "setup_logger"
+    "setup_logger",
 ]

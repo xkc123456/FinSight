@@ -86,7 +86,7 @@ class DeepSearchAgent(BaseAgent):
             response_format = {"type": "json_object"}
         )
         final_result = response
-        return {'coversation_history': conversation_history, 'final_result': final_result}
+        return {'conversation_history': conversation_history, 'final_result': final_result}
     
     async def _handle_search_action(self, action_content):
         search_engine = [item for item in self.tools if 'search' in item.name.lower()][0]
@@ -265,15 +265,6 @@ class DeepSearchAgent(BaseAgent):
         sources_text += "\n---\n"
         return sources_text
 
-    async def _handle_report_action(self, action_content: str):
-        """Handle a 'final' action from the LLM."""
-        return {
-            "action": "final_report",
-            "action_content": action_content,
-            "result": action_content,
-            "continue": False,
-        }
-    
     def _get_persist_extra_state(self) -> dict:
         """Persist valid_links and used_sources for resume support."""
         return {

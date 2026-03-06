@@ -4,7 +4,6 @@ import json
 import json_repair
 import dill
 from typing import List, Dict, Any, Tuple
-import asyncio
 from threading import Semaphore
 from src.agents.base_agent import BaseAgent
 from src.agents import DeepSearchAgent
@@ -81,8 +80,10 @@ class DataAnalyzer(BaseAgent):
         def _get_existed_data(data_id: int):
             return collect_data_list[data_id].data
         def _get_deepsearch_result(query: str):
+            from src.utils.async_bridge import get_async_bridge
+            bridge = get_async_bridge()
             ds_agent = tool_list[0]
-            output =  asyncio.run(ds_agent.async_run(input_data={
+            output = bridge.run_async(ds_agent.async_run(input_data={
                 'task': current_task_data['task'],
                 'query': query
             }))
@@ -160,15 +161,6 @@ class DataAnalyzer(BaseAgent):
             
         return formatted_data
     
-    async def _handle_report_action(self, action_content: str):
-        """Handle a 'final' action from the LLM."""
-        return {
-            "action": "final_report",
-            "action_content": action_content,
-            "result": action_content,
-            "continue": False,
-        }
-    
     async def _handle_max_round(self, conversation_history):
         conversation_history = [item["content"] for item in conversation_history]
         analysis_info = "\n\n".join(conversation_history)
@@ -209,7 +201,7 @@ class DataAnalyzer(BaseAgent):
             final_result = f'# {report_title}\n{report_content}'
         except Exception:
             final_result = response
-        return {'coversation_history': conversation_history, 'final_result': final_result}
+        return {'conversation_history': conversation_history, 'final_result': final_result}
     
     def _parse_generated_report(self, response: str):
         basic_task = self.current_task_data['task']
@@ -490,8 +482,9 @@ class DataAnalyzer(BaseAgent):
             run_result = self.current_checkpoint.get('phase1_result', {})
         try:
             final_result = run_result['final_result']
-        except:
-            self.logger.error(f"final_result: {final_result}")
+        except Exception:
+            self.logger.error(f"Failed to extract final_result from run_result: {run_result.keys()}")
+            final_result = ""
         # Parse the generated analysis report
         if self.current_phase == 'phase2':
             report_title, report_content = self._parse_generated_report(final_result)
@@ -568,20 +561,17 @@ class AnalysisResult:
         self.chart_name_description_mapping = chart_name_description_mapping
     
     def __str__(self):
-        # Replace placeholders with descriptive captions
-        content = self._repalce_image_name()[1]
+        content = self._replace_image_name()[1]
         return f"Report Title: {self.title}\nReport Content: {content}\n\n"
 
     def brief_str(self):
-        # Replace placeholders with descriptive captions
-        content = self._repalce_image_name()[1]
+        content = self._replace_image_name()[1]
         return f"Report Title: {self.title}\nReport Content: {content[:300]}...(more content available)\n\n"
     
-    def _repalce_image_name(self):
+    def _replace_image_name(self):
         image_name_list = []
         report_content = self.content
         img_list = re.findall("@import \"(.*?)\"", self.content)
-        # Note: AnalysisResult is not an agent and has no logger; use prints or another mechanism if logging is needed.
 
         for img in img_list:
             if img in self.chart_name_description_mapping:
@@ -594,4 +584,4 @@ class AnalysisResult:
         return image_name_list, report_content
     
     def get_all_img(self):
-        return self._repalce_image_name()[0]
+        return self._replace_image_name()[0]

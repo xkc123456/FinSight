@@ -30,8 +30,14 @@ class AsyncCodeExecutor:
     """
     Lightweight Python sandbox capable of executing LLM-generated code.
     """
-    def __init__(self, working_dir: str, exec_timeout: float = DEFAULT_EXEC_TIMEOUT):
+    def __init__(
+        self,
+        working_dir: str,
+        allowed_write_dir: str = None,
+        exec_timeout: float = DEFAULT_EXEC_TIMEOUT,
+    ):
         self.working_dir = working_dir
+        self.allowed_write_dir = allowed_write_dir or working_dir
         self.exec_timeout = exec_timeout
         os.makedirs(self.working_dir, exist_ok=True)
         self.session_id = str(uuid.uuid4())
@@ -65,10 +71,9 @@ class AsyncCodeExecutor:
 
         safe_builtins["__import__"] = _restricted_import
 
-        # Restrict open() writes to working_dir
         import os as _os_mod
         _original_open = _builtins_mod.open
-        _allowed_dir = _os_mod.path.abspath(self.working_dir)
+        _allowed_dir = _os_mod.path.abspath(self.allowed_write_dir)
 
         def _restricted_open(file, mode="r", *args, **kwargs):
             if any(m in mode for m in ("w", "a", "x", "+")):
@@ -136,7 +141,7 @@ class AsyncCodeExecutor:
                 'matplotlib': matplotlib,
             })
         except ImportError as e:
-            print(f"Warning: Failed to pre-import data libraries: {e}")
+            _sandbox_logger.warning("Failed to pre-import data libraries: %s", e)
 
         return context
 
@@ -239,7 +244,7 @@ class AsyncCodeExecutor:
         try:
             return dill.dumps(state)
         except Exception as e:
-            print(f"[{self.session_id}] Warning: failed to save lightweight state: {e}")
+            _sandbox_logger.warning("[%s] Failed to save lightweight state: %s", self.session_id, e)
             return dill.dumps({'imports': [], 'definitions': [], 'variables': {}})
 
     def load_state(self, state: bytes):
@@ -249,7 +254,7 @@ class AsyncCodeExecutor:
         try:
             payload = dill.loads(state)
         except Exception as e:
-            print(f"[{self.session_id}] Error: failed to load state: {e}. Resetting to a clean environment.")
+            _sandbox_logger.error("[%s] Failed to load state: %s. Resetting to a clean environment.", self.session_id, e)
             self.globals = self.create_clean_globals()
             return
 
@@ -305,7 +310,7 @@ class AsyncCodeExecutor:
                         important_vars[var_name] = f"Imported module: {var_value.__module__}"
                     if isinstance(var_value, pd.DataFrame):
                         important_vars[var_name] += ", and dtypes: " + str(var_value.dtypes)
-                except:
+                except Exception:
                     continue
         
         if important_vars:
@@ -331,21 +336,22 @@ class AsyncCodeExecutor:
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         has_error = False
-        header = "import matplotlib.pyplot as plt; plt.rcParams['font.sans-serif'] = ['SimHei']; plt.rcParams['axes.unicode_minus'] = False"       
-        code = header + '\n' + code
-        # Wrap exec so it can run inside a thread
+
+        _working_dir = os.path.abspath(self.working_dir)
+
         def sync_exec():
             nonlocal has_error
+            original_cwd = os.getcwd()
             try:
-                # Redirect stdout/stderr
+                os.chdir(_working_dir)
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                    # Execute code within the custom global scope
                     exec(code, self.globals)
             except Exception:
-                # Capture exec-level exceptions
                 has_error = True
                 stderr_capture.write(traceback.format_exc())
-                print("error code: code = \n", code)
+                _sandbox_logger.error("Code execution failed. Code:\n%s", code)
+            finally:
+                os.chdir(original_cwd)
 
         loop = asyncio.get_running_loop()
         try:
@@ -359,21 +365,23 @@ class AsyncCodeExecutor:
                 f"ExecutionTimeout: code execution exceeded {self.exec_timeout}s limit\n"
             )
         
-        # Run user-defined async entry points if present
         if 'async_main' in self.globals and \
            asyncio.iscoroutinefunction(self.globals['async_main']):
-            
             try:
-                # Redirect stdout/stderr as well
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                    # Await the user coroutine
-                    await self.globals['async_main']()
+                    await asyncio.wait_for(
+                        self.globals['async_main'](),
+                        timeout=self.exec_timeout,
+                    )
+            except asyncio.TimeoutError:
+                has_error = True
+                stderr_capture.write(
+                    f"ExecutionTimeout: async_main exceeded {self.exec_timeout}s limit\n"
+                )
             except Exception:
-                # Capture async execution errors
                 has_error = True
                 stderr_capture.write(traceback.format_exc())
             finally:
-                # Remove the coroutine to avoid reruns
                 del self.globals['async_main']
         
         stdout = stdout_capture.getvalue()

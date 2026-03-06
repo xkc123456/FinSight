@@ -8,7 +8,7 @@ root = str(Path(__file__).resolve().parents[2])
 sys.path.append(root)
 
 from src.config import Config
-from src.utils import AsyncCodeExecutor, CodeExecutor
+from src.utils import AsyncCodeExecutor
 
 async def main():
     print("\n--- [Test 1: Basic Execution & Package Import] ---")

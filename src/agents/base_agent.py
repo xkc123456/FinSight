@@ -1,6 +1,5 @@
 """Base agent with save/load/run capabilities."""
 from typing import Dict, Any, Union, Optional, Type
-import sys
 import os
 import pickle
 import dill
@@ -58,7 +57,10 @@ class BaseAgent:
         if self.enable_code:
             self.executor_path = os.path.join(self.working_dir, '.executor_cache')
             os.makedirs(self.executor_path, exist_ok=True)
-            self.code_executor = AsyncCodeExecutor(self.executor_path)
+            self.code_executor = AsyncCodeExecutor(
+                working_dir=self.executor_path,
+                allowed_write_dir=self.working_dir,
+            )
             self.executor_state_path = os.path.join(self.executor_path, 'state.dill')
         
         self.use_llm_name = use_llm_name
@@ -455,11 +457,10 @@ class BaseAgent:
                 sources = [item.source for item in response]
                 data_list = [item.data for item in response]
                 sources = "\n".join(sources)
-                import sys
                 display_note = f"[Tool Result Overview] Gather {len(response)} Tool Results.\n"
                 for i, item in enumerate(response):
                     display_note += f"-{i}. Name: {item.name}\nSource: {item.source}\n"
-                print(f"\n\n{display_note}\n\n", file=sys.stdout, flush=True)
+                self.logger.info(display_note)
 
                 self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
                 return data_list
@@ -593,7 +594,17 @@ class BaseAgent:
         return return_dict
 
     async def _handle_max_round(self, conversation_history):
-        return {'coversation_history': conversation_history, 'final_result': conversation_history[-1]['content']}
+        return {'conversation_history': conversation_history, 'final_result': conversation_history[-1]['content']}
+
+    # Canonical tag aliases: map legacy/alternative tags to the two
+    # supported action types ("code" and "final").
+    _TAG_ALIASES = {
+        'execute': 'code',
+        'final_result': 'final',
+        'report': 'final',
+        'outline': 'final',
+        'draft': 'final',
+    }
 
     def _parse_llm_response(self, response: str) -> tuple[str, str]:
         """Parse the LLM response to extract action tags."""
@@ -607,11 +618,8 @@ class BaseAgent:
         match = matches[-1]
 
         tag_name = match.group(1)
-        if tag_name == 'execute':
-            tag_name = 'code'
-        if tag_name == 'final_result':
-            tag_name = 'final'
-        content_string = match.group(2).strip()  # Remove surrounding whitespace
+        tag_name = self._TAG_ALIASES.get(tag_name, tag_name)
+        content_string = match.group(2).strip()
 
         return tag_name, content_string
 
