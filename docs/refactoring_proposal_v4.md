@@ -112,7 +112,8 @@ class TaskNode:
     agent_class: type
     agent_kwargs: dict
     run_kwargs: dict
-    depends_on: list[str]
+    depends_on: list[str]           # hard deps: any failure → SKIP this task
+    soft_depends_on: list[str] = field(default_factory=list)  # soft deps: failure won't block, only marks data as missing
     state: TaskState = TaskState.PENDING
     result: Optional[AgentResult] = None
 
@@ -125,11 +126,27 @@ class TaskGraph:
         return self  # chainable
 
     def get_ready_tasks(self) -> list[TaskNode]:
-        """Return tasks whose dependencies are all DONE."""
+        """Return tasks whose hard deps are all DONE and soft deps are all terminal."""
+        ready = []
+        for n in self._nodes.values():
+            if n.state != TaskState.PENDING:
+                continue
+            # Hard deps: must all be DONE
+            if not all(self._nodes[d].state == TaskState.DONE for d in n.depends_on):
+                continue
+            # Soft deps: must all be terminal (DONE / FAILED / SKIPPED), but allow failures
+            terminal = {TaskState.DONE, TaskState.FAILED, TaskState.SKIPPED}
+            if not all(self._nodes[d].state in terminal for d in n.soft_depends_on):
+                continue
+            ready.append(n)
+        return ready
+
+    def get_failed_soft_deps(self, task_id: str) -> list[str]:
+        """Return list of failed soft dependencies, so agents can be aware of missing data."""
+        node = self._nodes[task_id]
         return [
-            n for n in self._nodes.values()
-            if n.state == TaskState.PENDING
-            and all(self._nodes[d].state == TaskState.DONE for d in n.depends_on)
+            d for d in node.soft_depends_on
+            if self._nodes[d].state in (TaskState.FAILED, TaskState.SKIPPED)
         ]
 
     def mark_done(self, task_id: str, result: AgentResult):
@@ -143,10 +160,12 @@ class TaskGraph:
         self._cascade_skip(task_id)
 
     def _cascade_skip(self, failed_id: str):
+        """Only propagate SKIP along hard dependency edges. Soft dep failures don't cascade."""
         for node in self._nodes.values():
             if failed_id in node.depends_on and node.state == TaskState.PENDING:
                 node.state = TaskState.SKIPPED
                 self._cascade_skip(node.task_id)
+            # Note: failed_id in node.soft_depends_on does NOT propagate SKIP
 
     def is_complete(self) -> bool:
         return all(n.state in (TaskState.DONE, TaskState.FAILED, TaskState.SKIPPED)
@@ -157,7 +176,16 @@ class TaskGraph:
         return {tid: n.state.value for tid, n in self._nodes.items()}
 ```
 
-**Key difference from v3:** `mark_failed` cascades SKIP to all transitive dependents. No downstream task will sit in PENDING forever after an upstream failure.
+**Key differences from v3:**
+- `mark_failed` cascades SKIP along **hard dependency** edges to all transitive dependents. No downstream task will sit in PENDING forever after an upstream failure.
+- New **soft dependencies** (`soft_depends_on`): when a soft dependency fails, the cascade does NOT propagate SKIP. Downstream tasks still execute but can query `get_failed_soft_deps()` to know which upstream data is missing.
+
+**Why soft dependencies?** In report generation, data collection tasks (collectors) have a high failure rate (API timeouts, data source unavailability, etc.). If 1 of 5 collectors fails and causes all analyzers to be skipped, no report is produced at all. By making analyzers' dependency on collectors a soft dependency (see `build_task_graph` default implementation), we allow analysis based on partial data — partial data is always better than no data. Only truly indispensable prerequisites (e.g., analyzer → report) use hard dependencies.
+
+**Typical DAG dependency configuration:**
+- `collector_*` → no dependencies
+- `analyzer_*` → `depends_on=[]`, `soft_depends_on=[all collector_ids]` (tolerates partial collection failures)
+- `report` → `depends_on=[all analyzer_ids]` or `soft_depends_on=[all analyzer_ids]`
 
 #### `pipeline.py` — Single orchestrator for CLI and web
 
@@ -201,7 +229,7 @@ class Pipeline:
                 node.state = TaskState.RUNNING
                 await self._emit("task_started", node.task_id)
                 running[node.task_id] = asyncio.create_task(
-                    self._run_node(node, ctx, sem)
+                    self._run_node(node, ctx, sem, graph)
                 )
 
             if not running:
@@ -228,12 +256,32 @@ class Pipeline:
             self.checkpoint_mgr.save_pipeline(graph, ctx)
 
     async def _run_node(self, node: TaskNode, ctx: TaskContext,
-                        sem: asyncio.Semaphore) -> AgentResult:
+                        sem: asyncio.Semaphore,
+                        graph: TaskGraph) -> AgentResult:
         async with sem:
-            agent = node.agent_class(
-                config=self.config, task_context=ctx, **node.agent_kwargs
-            )
-            # Retry wrapper
+            # --- Agent factory: restore from checkpoint first, create new otherwise ---
+            saved_state = self.checkpoint_mgr.load_agent(node.task_id, phase=None)
+            if saved_state:
+                agent = node.agent_class.from_checkpoint(
+                    saved_state, config=self.config, task_context=ctx,
+                    **node.agent_kwargs
+                )
+                logger.info(f"Restored agent {node.task_id} from checkpoint")
+            else:
+                agent = node.agent_class(
+                    config=self.config, task_context=ctx, **node.agent_kwargs
+                )
+
+            # --- Inject soft dependency failure info so agent knows what data is missing ---
+            failed_deps = graph.get_failed_soft_deps(node.task_id)
+            if failed_deps:
+                node.run_kwargs['missing_dependencies'] = failed_deps
+                logger.warning(
+                    f"{node.task_id}: soft dependencies failed: {failed_deps}, "
+                    f"proceeding with partial data"
+                )
+
+            # --- Retry wrapper ---
             last_err = None
             for attempt in range(1 + self.max_retries):
                 try:
@@ -247,27 +295,62 @@ class Pipeline:
 
     async def _emit(self, event_type: str, task_id: str, **kwargs):
         if self.on_event:
-            await self.on_event({"type": event_type, "task_id": task_id, **kwargs})
+            try:
+                await self.on_event({"type": event_type, "task_id": task_id, **kwargs})
+            except Exception as e:
+                # Callback exceptions (e.g., WebSocket disconnect) must not crash the pipeline
+                logger.error(f"Event callback failed for {event_type}/{task_id}: {e}")
 
     def _log_graph_state(self, graph: TaskGraph):
         logger.info(f"DAG state: {graph.summary()}")
 ```
 
-**Why callback instead of EventEmitter?** Only one consumer exists (WebSocket broadcast in `app.py`). A callback is simpler, has no subscribe/unsubscribe lifecycle, and is trivially testable.
+**Why callback instead of EventEmitter?** Only one consumer exists (WebSocket broadcast in `app.py`). A callback is simpler, has no subscribe/unsubscribe lifecycle, and is trivially testable. Note that `_emit` internally catches callback exceptions, ensuring external failures (e.g., WebSocket disconnect) don't crash the entire pipeline.
+
+**Agent factory migration note:** The current `Memory.get_or_create_agent()` and `Memory.from_checkpoint()` maintain agent identity consistency (same agent_id is never created twice). After refactoring, this responsibility moves to `Pipeline._run_node()`: each `TaskNode.task_id` uniquely identifies an agent instance. `_run_node` first attempts to restore the agent from `CheckpointManager` (calling `agent_class.from_checkpoint()`), and only creates a new instance when no checkpoint exists. This requires all Agent subclasses to implement a `from_checkpoint(cls, saved_state, **kwargs)` classmethod. The existing `BaseAgent` already has similar restoration logic (`_restore_tools_from_checkpoint`, etc.) — during migration, standardize it into the `from_checkpoint` interface.
 
 #### `checkpoint.py` — Unified checkpoint authority
 
 ```python
+CHECKPOINT_VERSION = 2          # increment on every incompatible change
+
 class CheckpointManager:
     def __init__(self, working_dir: str):
         self.checkpoint_dir = os.path.join(working_dir, 'checkpoints')
 
     def save_pipeline(self, graph: TaskGraph, ctx: TaskContext):
         """Save pipeline-level state as JSON (inspectable)."""
-        ...
+        data = {
+            "version": CHECKPOINT_VERSION,
+            "saved_at": datetime.utcnow().isoformat(),
+            "graph": graph.to_dict(),
+            "task_context": ctx.to_dict(),
+        }
+        path = os.path.join(self.checkpoint_dir, 'pipeline.json')
+        # Atomic write: write to temp file then rename, preventing corruption on crash
+        tmp_path = path + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, path)
 
     def restore_pipeline(self, graph: TaskGraph, ctx: TaskContext) -> bool:
-        ...
+        """Restore pipeline state from checkpoint. Returns False on version mismatch."""
+        path = os.path.join(self.checkpoint_dir, 'pipeline.json')
+        if not os.path.exists(path):
+            return False
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        saved_version = data.get("version", 1)
+        if saved_version != CHECKPOINT_VERSION:
+            logger.warning(
+                f"Checkpoint version mismatch: saved={saved_version}, "
+                f"current={CHECKPOINT_VERSION}. Starting fresh run."
+            )
+            return False
+        graph.restore_from_dict(data["graph"])
+        ctx.restore_from_dict(data["task_context"])
+        logger.info(f"Restored pipeline from checkpoint (version={saved_version})")
+        return True
 
     def save_agent(self, agent_id: str, phase: str, data: dict):
         """Save agent-level state (dill for code executor state)."""
@@ -275,11 +358,24 @@ class CheckpointManager:
 
     def load_agent(self, agent_id: str, phase: str) -> Optional[dict]:
         ...
+
+    def try_load_legacy_checkpoint(self, legacy_dir: str) -> Optional[dict]:
+        """Attempt to load v1-era dill-format checkpoints for one-time migration.
+
+        Keep this method during the migration transition period (2 weeks after
+        Phase 1 completion). If a legacy checkpoint is detected, extract
+        collected_data and analysis_results, convert to new JSON format
+        TaskContext, save as JSON, then archive the old file.
+        Remove this method after the transition period.
+        """
+        ...
 ```
 
 **Checkpoint format strategy:**
 - Pipeline state (graph + TaskContext): **JSON** — human-readable, inspectable via any text editor, version-stable
 - Agent internal state (conversation history, code executor): **dill** — necessary for lambda/closure serialization
+- **Version compatibility**: `CHECKPOINT_VERSION` constant increments on incompatible changes. `restore_pipeline` gracefully degrades to a fresh run on version mismatch, with a warning log, preventing silent deserialization errors from old formats.
+- **Legacy migration**: `try_load_legacy_checkpoint()` provides a one-time migration path, extracting valid data (collected_data, analysis_results) from old dill checkpoints and converting them to the new JSON format. Remove after the 2-week transition period.
 
 This layering means when something fails, you can `cat checkpoints/pipeline.json` to see exactly which tasks completed and what data was collected, without needing Python.
 
@@ -434,7 +530,8 @@ class ReportPlugin(ABC):
                 agent_class=DataAnalyzer,
                 agent_kwargs={...},
                 run_kwargs={'input_data': {'task': ..., 'analysis_task': task}},
-                depends_on=collector_ids,  # all collectors must finish
+                depends_on=[],                        # no hard deps
+                soft_depends_on=collector_ids,         # tolerate partial collection failures
             ))
             analyzer_ids.append(tid)
 
@@ -443,7 +540,7 @@ class ReportPlugin(ABC):
             agent_class=ReportGenerator,
             agent_kwargs={...},
             run_kwargs={'input_data': {...}},
-            depends_on=analyzer_ids,
+            depends_on=analyzer_ids,                   # all analyzers must be terminal
         ))
         return graph
 ```
