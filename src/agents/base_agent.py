@@ -33,7 +33,7 @@ class BaseAgent:
     def __init__(
         self, 
         config: Config, 
-        tools: list[Union[Tool, 'BaseAgent']],
+        tools: list[Union[Tool, 'BaseAgent']] = None,
         use_llm_name: str = "deepseek-chat",
         enable_code = True,
         memory = None,
@@ -75,6 +75,7 @@ class BaseAgent:
         self.checkpoint_mgr = None  # set by Pipeline when using new core
         
         if tools is None or tools == []:
+            self.tools = []
             self._set_default_tools()
         else:
             self.tools = tools

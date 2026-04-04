@@ -12,7 +12,7 @@ class DataCollector(BaseAgent):
     def __init__(
         self,
         config,
-        tools = [],
+        tools = None,
         use_llm_name: str = "deepseek-chat",
         enable_code = True,
         memory = None,
@@ -37,8 +37,6 @@ class DataCollector(BaseAgent):
         self.DATA_COLLECT_PROMPT = self.prompt_loader.get_prompt('data_collect')
         
         self.collected_data_list: List[ToolResult] = []
-        if self.tools == []:
-            self._set_default_tools()
         
 
     def _set_default_tools(self):

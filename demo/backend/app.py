@@ -652,7 +652,7 @@ async def run_report_generation(resume: bool = False):
         )
 
         graph = await pipeline.run(ctx, resume=resume, plugin=plugin)
-        logger.info("All tasks completed. DAG: %s", graph.summary())
+        logger.info(f"All tasks completed. DAG: {graph.summary()}")
 
         execution_state["is_running"] = False
         execution_state["current_priority"] = None

@@ -22,7 +22,7 @@ class ReportGenerator(BaseAgent):
     def __init__(
         self,
         config,
-        tools = [],
+        tools = None,
         use_llm_name: str = "deepseek-chat",
         use_embedding_name: str = "qwen3-embedding",
         enable_code = True,

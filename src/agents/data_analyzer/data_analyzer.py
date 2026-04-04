@@ -20,7 +20,7 @@ class DataAnalyzer(BaseAgent):
     def __init__(
         self,
         config,
-        tools = [],
+        tools = None,
         use_llm_name: str = "deepseek-chat",
         use_vlm_name: str = "qwen/qwen3-vl-235b-a22b-instruct",
         use_embedding_name: str = 'qwen/qwen3-embedding-0.6b',
@@ -38,8 +38,6 @@ class DataAnalyzer(BaseAgent):
             agent_id=agent_id,
             task_context=task_context,
         )
-        if self.tools == []:
-            self._set_default_tools()
 
         # Load prompts using the YAML-based loader
         from src.utils.prompt_loader import get_prompt_loader
