@@ -41,8 +41,10 @@ class DataAnalyzer(BaseAgent):
 
         # Load prompts using the YAML-based loader
         from src.utils.prompt_loader import get_prompt_loader
+        from src.plugins import load_plugin
         target_type = self.config.config['target_type']
         self.prompt_loader = get_prompt_loader('data_analyzer', report_type=target_type)
+        self._prompt_defaults = load_plugin(target_type).get_prompt_defaults()
         
         # Store prompts as instance attributes for easy access
         self.DATA_ANALYSIS_PROMPT = self.prompt_loader.get_prompt('data_analysis')
@@ -314,6 +316,8 @@ class DataAnalyzer(BaseAgent):
                             {"type": "text", "text": self.VLM_CRITIQUE_PROMPT.format(
                                 task=task,
                                 content=report_content,
+                                code_snippet=chart_code,
+                                domain=self._prompt_defaults.get('domain', 'professional'),
                             )},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
                         ]

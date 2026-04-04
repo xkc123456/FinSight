@@ -149,6 +149,9 @@ class Pipeline:
             restored = self.checkpoint_mgr.restore_pipeline(graph, task_context)
             if restored:
                 logger.info("📂 Resumed from checkpoint.")
+                reset_count = graph.reset_failed()
+                if reset_count:
+                    logger.info("↻ Reset %d failed/skipped tasks for retry.", reset_count)
                 await self._repopulate_artifacts(graph, task_context)
 
         logger.section("Pipeline Execution")

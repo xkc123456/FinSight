@@ -154,6 +154,19 @@ class TaskGraph:
                 elif info["state"] == TaskState.DONE.value:
                     self._nodes[tid].result = AgentResult(tid, AgentStatus.SUCCESS)
 
+    def reset_failed(self) -> int:
+        """Reset FAILED and SKIPPED tasks to PENDING so they can be retried.
+
+        Returns the number of tasks reset.
+        """
+        count = 0
+        for node in self._nodes.values():
+            if node.state in (TaskState.FAILED, TaskState.SKIPPED):
+                node.state = TaskState.PENDING
+                node.result = None
+                count += 1
+        return count
+
     def iter_nodes(self) -> list[TaskNode]:
         """Return all nodes (for external iteration without accessing _nodes)."""
         return list(self._nodes.values())
