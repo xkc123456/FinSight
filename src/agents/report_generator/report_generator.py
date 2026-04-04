@@ -78,27 +78,20 @@ class ReportGenerator(BaseAgent):
         tool_list = []
         tool_list.append(DeepSearchAgent(
             config=self.config, use_llm_name=self.use_llm_name,
-            memory=self.memory, task_context=self.task_context,
+            task_context=self.task_context,
         ))
-        if self.memory is not None:
-            for tool in tool_list:
-                self.memory.add_dependency(tool.id, self.id)
         self.tools = tool_list
 
     def _get_collect_data(self, exclude_type=None):
         """Get collected data from task_context or memory."""
         if self.task_context is not None:
             return self.task_context.get("collected_data")
-        if self.memory is not None:
-            return self.memory.get_collect_data(exclude_type=exclude_type or [])
         return []
 
     def _get_analysis_results(self):
         """Get analysis results from task_context or memory."""
         if self.task_context is not None:
             return self.task_context.get("analysis_results")
-        if self.memory is not None:
-            return self.memory.get_analysis_result()
         return []
     
     async def _prepare_executor(self):
@@ -372,8 +365,8 @@ class ReportGenerator(BaseAgent):
         return report
 
     async def _add_cover_page(self, input_data, report):
-        pipeline_type = input_data.get('target_type', 'company')
-        if pipeline_type != 'company':
+        pipeline_type = input_data.get('target_type', '')
+        if pipeline_type not in ('company', 'financial_company'):
             return report
         stock_code = input_data.get('stock_code', '')
         if stock_code == "":
@@ -456,11 +449,7 @@ class ReportGenerator(BaseAgent):
             content = item.source
             if isinstance(item, ClickResult):
                 url = item.link
-                title = ""
-                if self.memory is not None:
-                    title = self.memory.get_url_title(url)
-                if title == "":
-                    title = item.name
+                title = item.name
                 content = f"{title}\n{url}"
 
             # content = item.name + '\n' + item.link  # used for display citation
@@ -695,8 +684,6 @@ class ReportGenerator(BaseAgent):
                 },
                 checkpoint_name=checkpoint_name,
             )
-            if self.memory is not None:
-                self.memory.save()
             self.logger.info(f"[Phase] Outline completed: sections={len(report.sections)}")
 
         async def _phase_sections():
@@ -720,12 +707,6 @@ class ReportGenerator(BaseAgent):
                 )
                 draft_section = section_result['final_result']
                 final_section = await self._final_polish(section_input_data, draft_section)
-                if self.memory is not None:
-                    self.memory.add_log(
-                        id=self.id, type=self.type,
-                        input_data=section_input_data, output_data=section_result,
-                        error=False, note="Report generator executed successfully",
-                    )
                 section.set_content(final_section)
                 self._rg_state['section_index_done'] = idx + 1
                 await self.save(
@@ -737,8 +718,6 @@ class ReportGenerator(BaseAgent):
                     },
                     checkpoint_name=checkpoint_name,
                 )
-                if self.memory is not None:
-                    self.memory.save()
                 self.logger.info(f"[Phase] Section {idx+1} done")
             await self.save(
                 state={
@@ -749,8 +728,6 @@ class ReportGenerator(BaseAgent):
                 },
                 checkpoint_name=checkpoint_name,
             )
-            if self.memory is not None:
-                self.memory.save()
             self.logger.info("[Phase] All sections generated")
 
         async def _phase_replace_images():
@@ -846,8 +823,6 @@ class ReportGenerator(BaseAgent):
                 checkpoint_name=checkpoint_name,
             )
             self.logger.info(f"[Phase] Render done: md={md_path}, docx={docx_path}")
-            if self.memory is not None:
-                self.memory.save()
 
         await self._run_phases(
             phases=[

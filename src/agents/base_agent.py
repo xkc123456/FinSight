@@ -72,9 +72,6 @@ class BaseAgent:
             self._set_default_tools()
         else:
             self.tools = tools
-        if self.memory is not None:
-            for tool in self.tools:
-                self.memory.add_dependency(tool.id, self.id)
         self.current_task_data = {}
         self.current_checkpoint = {}
         self._resume_state: Dict[str, Any] | None = None
@@ -126,10 +123,6 @@ class BaseAgent:
                     continue
             self.logger.info(f"[{self.AGENT_NAME}] Phase: {name}")
             await fn()
-            if self.checkpoint_mgr is not None:
-                self.checkpoint_mgr.save_agent(
-                    self.id, name, self._get_checkpoint_state()
-                )
 
     def _get_checkpoint_state(self) -> dict:
         """Return state dict for phase-level checkpointing. Override in subclass."""
@@ -465,8 +458,6 @@ class BaseAgent:
                     break
         if target_tool is None:
             self.logger.warning(f"No available tools for tool_name: {tool_name}")
-            if self.memory is not None:
-                self.memory.add_log(self.id, None, kwargs, [], error=True, note=f"No available tools for tool_name: {tool_name}")
             return []
 
         bridge = get_async_bridge()
@@ -495,8 +486,6 @@ class BaseAgent:
                     kwargs['task'] = self.current_task_data['task']
                 response = bridge.run_async(target_tool.async_run(input_data=kwargs))
                 response = response['final_result']
-                if self.memory is not None:
-                    self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
                 return response
             elif issubclass(type(target_tool), Tool):
                 response = bridge.run_async(target_tool.api_function(**kwargs))
@@ -509,18 +498,12 @@ class BaseAgent:
                     display_note += f"-{i}. Name: {item.name}\nSource: {item.source}\n"
                 print(f"\n\n{display_note}\n\n", file=sys.stdout, flush=True)
 
-                if self.memory is not None:
-                    self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
                 return data_list
             else:
                 self.logger.warning(f"Unknown tools: {tool_name}")
-                if self.memory is not None:
-                    self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Unknown tools: {tool_name}")
                 return []
         except Exception as e:
             self.logger.error(f"Tool {tool_name} execution failed: {e}", exc_info=True)
-            if self.memory is not None:
-                self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Tool {tool_name} executed failed: {e}")
             return []
     
     def _get_api_descriptions(self) -> str:
@@ -639,13 +622,11 @@ class BaseAgent:
             state=current_state,
             checkpoint_name=checkpoint_name,
         )
-        if self.memory is not None:
-            self.memory.save()
         
         return return_dict
 
     async def _handle_max_round(self, conversation_history):
-        return {'coversation_history': conversation_history, 'final_result': conversation_history[-1]['content']}
+        return {'conversation_history': conversation_history, 'final_result': conversation_history[-1]['content']}
 
     def _parse_llm_response(self, response: str) -> tuple[str, str]:
         """Parse the LLM response to extract action tags."""

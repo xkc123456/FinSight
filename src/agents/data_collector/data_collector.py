@@ -50,7 +50,7 @@ class DataCollector(BaseAgent):
         tool_list = []
         tool_list.append(DeepSearchAgent(
             config=self.config, use_llm_name=self.use_llm_name,
-            memory=self.memory, task_context=self.task_context,
+            task_context=self.task_context,
         ))
         # Determine which API categories to load
         categories = self._tool_categories
@@ -62,9 +62,6 @@ class DataCollector(BaseAgent):
             for tool_name in tool_name_list:
                 tool_instance = get_tool_by_name(tool_name)()
                 tool_list.append(tool_instance)
-        if self.memory is not None:
-            for tool in tool_list:
-                self.memory.add_dependency(tool.id, self.id)
         self.tools = tool_list
         try:
             self.logger.info(f"Initialized default tools: total {len(tool_list)} items")
@@ -88,8 +85,6 @@ class DataCollector(BaseAgent):
         self.collected_data_list.append(item)
         if self.task_context is not None:
             self.task_context.put("collected_data", item)
-        if self.memory is not None:
-            self.memory.add_data(item)
         try:
             self.logger.info(f"Saved collect result: {result_name} (source={data_source})")
         except Exception:
@@ -143,16 +138,6 @@ class DataCollector(BaseAgent):
         run_result['collected_data_list'] = self.collected_data_list
         # Note: data is already persisted in _save_result() during execution.
         self.logger.info(f"DataCollector finished: collected={len(self.collected_data_list)} items")
-        if self.memory is not None:
-            self.memory.add_log(
-                id=self.id,
-                type=self.type,
-                input_data=input_data,
-                output_data=self.collected_data_list,
-                error=False,
-                note=f"DataCollector finished: collected={len(self.collected_data_list)} items"
-            )
-            self.memory.save()
         return run_result
 
     def _get_persist_extra_state(self) -> Dict[str, Any]:

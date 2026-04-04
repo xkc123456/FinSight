@@ -35,7 +35,14 @@ def load_plugin(target_type: str) -> ReportPlugin:
 
     The first call for a given type triggers a lazy import of
     ``src.plugins.<target_type>.plugin`` to populate the registry.
+
+    Legacy aliases (e.g. ``"company"`` → ``"financial_company"``) are
+    resolved automatically by :class:`~src.config.config.ConfigSchema`,
+    but we also handle them here for safety.
     """
+    from src.config.config import _TARGET_TYPE_ALIASES
+    target_type = _TARGET_TYPE_ALIASES.get(target_type, target_type)
+
     if target_type not in _PLUGIN_REGISTRY:
         mod_name = f"src.plugins.{target_type}.plugin"
         try:

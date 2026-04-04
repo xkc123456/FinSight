@@ -88,7 +88,7 @@ class DeepSearchAgent(BaseAgent):
             response_format = {"type": "json_object"}
         )
         final_result = response
-        return {'coversation_history': conversation_history, 'final_result': final_result}
+        return {'conversation_history': conversation_history, 'final_result': final_result}
     
     async def _handle_search_action(self, action_content):
         search_engine = [item for item in self.tools if 'search' in item.name.lower()][0]
@@ -126,30 +126,10 @@ class DeepSearchAgent(BaseAgent):
             for search_item in search_result:
                 if self.task_context is not None:
                     self.task_context.put("collected_data", search_item)
-                if self.memory is not None:
-                    self.memory.add_data(search_item)
-            if self.memory is not None:
-                self.memory.add_log(
-                    id = search_engine.id, 
-                    type=search_engine.type,
-                    input_data = {'query': action_content}, 
-                    output_data = {'result': search_result_list}, 
-                    error=False, 
-                    note=f"Search engine {search_engine.name} executed successfully"
-                )
             self.logger.info(f"Search action done: query={action_content}")
                 
         except Exception as e:
             result = f"Query `{action_content}` failed with error: {str(e)}. Please retry."
-            if self.memory is not None:
-                self.memory.add_log(
-                    id = search_engine.id, 
-                    type=search_engine.type,
-                    input_data = {'query': action_content}, 
-                    output_data = {"result": result}, 
-                    error=True, 
-                    note=f"Search engine {search_engine.name} executed failed: {str(e)}"
-                )
             self.logger.error(f"Search action failed: query={action_content}, error={e}", exc_info=True)
         
         # On the last iteration, append available sources reminder
@@ -210,31 +190,11 @@ class DeepSearchAgent(BaseAgent):
             if not ('error' in click_result[0].name.lower()):
                 if self.task_context is not None:
                     self.task_context.put("collected_data", click_result[0])
-                if self.memory is not None:
-                    self.memory.add_data(click_result[0])
-            if self.memory is not None:
-                self.memory.add_log(
-                    id = click_engine.id, 
-                    type=click_engine.type,
-                    input_data = {'url': action_content}, 
-                    output_data = {"result": result}, 
-                    error=False, 
-                    note=f"Click engine {click_engine.name} executed successfully"
-                )
             self.logger.info(f"Click action done: url={action_content}")
             
         except Exception as e:
             result =  "Failed to fetch url: " + action_content + "\n"
             result += f'Error: {e}'
-            if self.memory is not None:
-                self.memory.add_log(
-                    id = click_engine.id, 
-                    type=click_engine.type,
-                    input_data = {'url': action_content}, 
-                    output_data = {"result": result}, 
-                    error=True, 
-                    note=f"Click engine {click_engine.name} executed failed: {str(e)}"
-                )
             self.logger.error(f"Click action failed: url={action_content}, error={e}", exc_info=True)
         
         # On the last iteration, append available sources reminder
@@ -330,8 +290,6 @@ class DeepSearchAgent(BaseAgent):
         )
         if self.task_context is not None:
             self.task_context.put("collected_data", agent_result)
-        if self.memory is not None:
-            self.memory.add_data(agent_result)
         return run_result
         
 # TODO: add agentresult class

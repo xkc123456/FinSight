@@ -1,6 +1,6 @@
 target_name: "商汤科技"
 stock_code: "00020"
-target_type: 'company'  # company, macro, industry
+target_type: 'financial_company'  # financial_company, financial_industry, financial_macro, general, governance
 market: 'A'  # A (Chinese A-share), HK (Hong Kong), US (United States)
 output_dir: "./outputs/exp-v1"
 language: 'zh' # zh,en

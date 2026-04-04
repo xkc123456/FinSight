@@ -45,6 +45,13 @@ _VALID_TARGET_TYPES = {
     "company", "macro", "industry",
 }
 
+# Maps legacy short names to canonical plugin names.
+_TARGET_TYPE_ALIASES: dict[str, str] = {
+    "company": "financial_company",
+    "macro": "financial_macro",
+    "industry": "financial_industry",
+}
+
 _VALID_LANGUAGES = {"zh", "en"}
 
 
@@ -82,7 +89,8 @@ class ConfigSchema(BaseModel):
             raise ValueError(
                 f"target_type must be one of {sorted(_VALID_TARGET_TYPES)}, got {v!r}"
             )
-        return v
+        # Normalise legacy aliases to canonical plugin names.
+        return _TARGET_TYPE_ALIASES.get(v, v)
 
     @field_validator("language")
     @classmethod
@@ -212,6 +220,21 @@ class Config:
         from src.utils.rate_limiter import RateLimiter
         rate_limits = self.config.get('rate_limits', {})
         self.rate_limiter = RateLimiter(rate_limits)
+
+    # ------------------------------------------------------------------
+    # Default model-name helpers (centralises os.getenv fallback)
+    # ------------------------------------------------------------------
+    @property
+    def default_llm_name(self) -> str:
+        return self.config.get("default_llm_name", "") or os.getenv("DS_MODEL_NAME", "deepseek-chat")
+
+    @property
+    def default_vlm_name(self) -> str:
+        return self.config.get("default_vlm_name", "") or os.getenv("VLM_MODEL_NAME", "qwen/qwen3-vl-235b-a22b-instruct")
+
+    @property
+    def default_embedding_name(self) -> str:
+        return self.config.get("default_embedding_name", "") or os.getenv("EMBEDDING_MODEL_NAME", "qwen/qwen3-embedding-0.6b")
 
     def __str__(self):
         return str(self.config)

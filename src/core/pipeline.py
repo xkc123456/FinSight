@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
@@ -57,7 +56,7 @@ async def generate_tasks(
     custom_collect: list[str] = config.config.get("custom_collect_tasks", [])
     custom_analyze: list[str] = config.config.get("custom_analysis_tasks", [])
 
-    use_llm_name = os.getenv("DS_MODEL_NAME", "deepseek-chat")
+    use_llm_name = config.default_llm_name
 
     llm_collect = await generate_collect_tasks(
         ctx, config, prompt_loader, query,
@@ -167,7 +166,10 @@ class Pipeline:
                 running.values(), return_when=asyncio.FIRST_COMPLETED
             )
             for task in done:
-                tid = next(k for k, v in running.items() if v is task)
+                tid = next((k for k, v in running.items() if v is task), None)
+                if tid is None:
+                    logger.error("Completed asyncio.Task not found in running dict")
+                    continue
                 del running[tid]
                 exc = task.exception()
                 if exc is not None:

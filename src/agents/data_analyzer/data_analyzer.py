@@ -69,19 +69,14 @@ class DataAnalyzer(BaseAgent):
         tool_list = []
         tool_list.append(DeepSearchAgent(
             config=self.config, use_llm_name=self.use_llm_name,
-            memory=self.memory, task_context=self.task_context,
+            task_context=self.task_context,
         ))
-        if self.memory is not None:
-            for tool in tool_list:
-                self.memory.add_dependency(tool.id, self.id)
         self.tools = tool_list
 
     def _get_collect_data(self, exclude_type=None):
         """Get collected data from task_context or memory."""
         if self.task_context is not None:
             return self.task_context.get("collected_data")
-        if self.memory is not None:
-            return self.memory.get_collect_data(exclude_type=exclude_type or [])
         return []
 
     async def _prepare_executor(self):
@@ -209,7 +204,7 @@ class DataAnalyzer(BaseAgent):
             final_result = f'# {report_title}\n{report_content}'
         except Exception:
             final_result = response
-        return {'coversation_history': conversation_history, 'final_result': final_result}
+        return {'conversation_history': conversation_history, 'final_result': final_result}
     
     def _parse_generated_report(self, response: str):
         basic_task = self.current_task_data['task']
@@ -513,17 +508,9 @@ class DataAnalyzer(BaseAgent):
                 chart_name_mapping=name_mapping,
                 chart_name_description_mapping=name_description_mapping,
             )
-            # Persist to task_context and/or memory
+            # Persist to task_context
             if self.task_context is not None:
                 self.task_context.put("analysis_results", analysis_result)
-            if self.memory is not None:
-                self.memory.add_data(analysis_result)
-                self.memory.add_log(
-                    id=self.id, type=self.type,
-                    input_data=input_data, output_data=analysis_result,
-                    error=False, note="Analysis result generated successfully",
-                )
-                self.memory.save()
             await self.save(
                 state={'phase_state': self._phase_state, 'finished': True},
                 checkpoint_name=checkpoint_name,
@@ -561,15 +548,15 @@ class AnalysisResult:
     
     def __str__(self):
         # Replace placeholders with descriptive captions
-        content = self._repalce_image_name()[1]
+        content = self._replace_image_name()[1]
         return f"Report Title: {self.title}\nReport Content: {content}\n\n"
 
     def brief_str(self):
         # Replace placeholders with descriptive captions
-        content = self._repalce_image_name()[1]
+        content = self._replace_image_name()[1]
         return f"Report Title: {self.title}\nReport Content: {content[:300]}...(more content available)\n\n"
     
-    def _repalce_image_name(self):
+    def _replace_image_name(self):
         image_name_list = []
         report_content = self.content
         img_list = re.findall("@import \"(.*?)\"", self.content)
@@ -586,4 +573,4 @@ class AnalysisResult:
         return image_name_list, report_content
     
     def get_all_img(self):
-        return self._repalce_image_name()[0]
+        return self._replace_image_name()[0]

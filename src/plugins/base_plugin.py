@@ -96,9 +96,9 @@ class ReportPlugin(ABC):
         from src.core.task_graph import TaskGraph, TaskNode
         from src.agents import DataAnalyzer, DataCollector, ReportGenerator
 
-        use_llm_name = os.getenv("DS_MODEL_NAME", "deepseek-chat")
-        use_vlm_name = os.getenv("VLM_MODEL_NAME", "qwen/qwen3-vl-235b-a22b-instruct")
-        use_embedding_name = os.getenv("EMBEDDING_MODEL_NAME", "qwen/qwen3-embedding-0.6b")
+        use_llm_name = config.default_llm_name
+        use_vlm_name = config.default_vlm_name
+        use_embedding_name = config.default_embedding_name
 
         graph = TaskGraph()
         collector_ids: list[str] = []
