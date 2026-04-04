@@ -3,8 +3,10 @@ stock_code: "00020.hk"
 target_type: 'financial_company'  # financial_company, macro, industry, general
 output_dir: "./outputs/exp-v3"
 language: 'zh' # zh,en
-reference_doc_path: 'src/template/report_template.docx' # used for docx style
-outline_template_path: 'src/template/company_outline_zh.md' # used for outline style
+# reference_doc_path and outline_template_path are auto-resolved from the plugin.
+# Override here only if you want to use a custom template:
+# reference_doc_path: 'src/plugins/financial_company/templates/report_template.docx'
+# outline_template_path: 'src/plugins/financial_company/templates/outline_zh.md'
 
 custom_collect_tasks:
   - "资产负债表, 利润表, 现金流量表三大财务报表"

@@ -99,12 +99,16 @@ class ReportPlugin(ABC):
         ctx: "TaskContext",
         collect_tasks: list[str],
         analyze_tasks: list[str],
+        lite: bool = False,
     ) -> "TaskGraph":
         """Build the task DAG for this report type.
 
         The default implementation creates the standard
         ``collector → analyzer → report`` topology.  Override in a
         subclass only if you need a genuinely different DAG shape.
+
+        When *lite* is True, agent iterations are reduced and charts are
+        disabled to minimise LLM cost and wall-clock time.
         """
         from src.core.task_graph import TaskGraph, TaskNode
         from src.agents import DataAnalyzer, DataCollector, ReportGenerator
@@ -113,6 +117,20 @@ class ReportPlugin(ABC):
         use_vlm_name = config.default_vlm_name
         use_embedding_name = config.default_embedding_name
         flags = self.get_post_process_flags()
+
+        # Lite overrides: fewer iterations, no charts, no cover page
+        if lite:
+            collector_iters = 5
+            analyzer_iters = 5
+            report_iters = 5
+            enable_chart = False
+            add_cover_page = False
+        else:
+            collector_iters = 20
+            analyzer_iters = 20
+            report_iters = 20
+            enable_chart = flags.enable_chart
+            add_cover_page = flags.add_cover_page
 
         graph = TaskGraph()
         collector_ids: list[str] = []
@@ -137,7 +155,7 @@ class ReportPlugin(ABC):
                 run_kwargs={
                     "input_data": {"task": f"{target_desc}, task: {task}"},
                     "echo": True,
-                    "max_iterations": 20,
+                    "max_iterations": collector_iters,
                 },
             ))
 
@@ -159,8 +177,8 @@ class ReportPlugin(ABC):
                         "analysis_task": task,
                     },
                     "echo": True,
-                    "max_iterations": 20,
-                    "enable_chart": flags.enable_chart,
+                    "max_iterations": analyzer_iters,
+                    "enable_chart": enable_chart,
                 },
                 soft_depends_on=list(collector_ids),
                 min_soft_deps=min(1, len(collector_ids)),
@@ -189,10 +207,10 @@ class ReportPlugin(ABC):
             run_kwargs={
                 "input_data": report_input,
                 "echo": True,
-                "max_iterations": 20,
-                "enable_chart": flags.enable_chart,
+                "max_iterations": report_iters,
+                "enable_chart": enable_chart,
                 "add_introduction": flags.add_introduction,
-                "add_cover_page": flags.add_cover_page,
+                "add_cover_page": add_cover_page,
                 "add_reference_section": flags.add_references,
             },
             soft_depends_on=list(analyzer_ids),

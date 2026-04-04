@@ -3,8 +3,10 @@ stock_code: ""
 target_type: 'financial_industry'  # financial_company, macro, industry, general
 output_dir: "./outputs/exp-v3"
 language: 'zh' # zh,en
-reference_doc_path: 'src/template/report_template_yulan.docx' # used for docx style
-outline_template_path: 'src/template/industry_outline_zh.md' # used for outline style
+# reference_doc_path and outline_template_path are auto-resolved from the plugin.
+# Override here only if you want to use a custom template:
+# reference_doc_path: 'src/plugins/financial_industry/templates/report_template.docx'
+# outline_template_path: 'src/plugins/financial_industry/templates/outline_zh.md'
 
 custom_collect_tasks:
   - "中国政府关于'人工智能+'、'金融五篇大文章'及数字金融相关的最新政策文件与指导意见"

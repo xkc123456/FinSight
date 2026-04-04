@@ -286,7 +286,7 @@ class TestDryRun:
 
         class _StubPlugin:
             name = "stub"
-            def build_task_graph(self, config, ctx, collect, analyze):
+            def build_task_graph(self, config, ctx, collect, analyze, **kwargs):
                 return _build_simple_graph()
 
         # Patch generate_tasks so no LLM is needed

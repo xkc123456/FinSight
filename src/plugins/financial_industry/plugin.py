@@ -13,7 +13,7 @@ class FinancialIndustryPlugin(ReportPlugin):
     def get_post_process_flags(self) -> PostProcessFlags:
         return PostProcessFlags(
             add_introduction=True,
-            add_cover_page=True,
+            add_cover_page=False,  # industry reports have no single-company financials
             add_references=True,
             enable_chart=True,
         )

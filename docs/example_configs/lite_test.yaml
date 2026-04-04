@@ -1,0 +1,31 @@
+# Lite test config — use with `python run_report.py --config docs/example_configs/lite_test.yaml --lite`
+# Generates a minimal report quickly with low cost.
+# Pair with --lite to cap tasks and disable charts automatically.
+
+target_name: "商汤科技"
+stock_code: "00020.hk"
+target_type: "financial_company"
+output_dir: "./outputs/lite-test"
+language: "zh"
+
+# Minimal tasks — only specify 1-2 each for fastest run
+custom_collect_tasks:
+  - "公司基本信息和主营业务"
+  - "最近一年股价数据"
+
+custom_analysis_tasks:
+  - "分析公司核心业务和行业地位"
+
+llm_config_list:
+  - model_name: "${DS_MODEL_NAME}"
+    api_key: "${DS_API_KEY}"
+    base_url: "${DS_BASE_URL}"
+    generation_params:
+      temperature: 0.5
+      max_tokens: 8192
+  - model_name: "${EMBEDDING_MODEL_NAME}"
+    api_key: "${EMBEDDING_API_KEY}"
+    base_url: "${EMBEDDING_BASE_URL}"
+  - model_name: "${VLM_MODEL_NAME}"
+    api_key: "${VLM_API_KEY}"
+    base_url: "${VLM_BASE_URL}"

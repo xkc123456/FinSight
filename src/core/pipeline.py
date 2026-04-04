@@ -85,12 +85,14 @@ class Pipeline:
         on_event: Callable[[PipelineEvent], Awaitable[None]] | None = None,
         max_retries: int = 0,
         dry_run: bool = False,
+        lite: bool = False,
     ) -> None:
         self.config = config
         self.max_concurrent = max_concurrent
         self.on_event = on_event
         self.max_retries = max_retries
         self.dry_run = dry_run
+        self.lite = lite
         self.checkpoint_mgr = CheckpointManager(config.working_dir)
 
     # ------------------------------------------------------------------
@@ -118,12 +120,21 @@ class Pipeline:
             plugin = load_plugin(task_context.target_type)
 
         all_collect, all_analyze = await generate_tasks(task_context, self.config)
+
+        # Lite mode: cap tasks and reduce iterations for fast, low-cost runs
+        if self.lite:
+            all_collect = all_collect[:2]
+            all_analyze = all_analyze[:1]
+            logger.info("Lite mode: capped to %d collect, %d analyze tasks",
+                        len(all_collect), len(all_analyze))
+
         logger.info(
             "Tasks — collect: %d, analyze: %d", len(all_collect), len(all_analyze)
         )
 
         graph = plugin.build_task_graph(
-            self.config, task_context, all_collect, all_analyze
+            self.config, task_context, all_collect, all_analyze,
+            lite=self.lite,
         )
 
         if self.dry_run:
