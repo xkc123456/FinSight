@@ -156,17 +156,25 @@ class Pipeline:
         completed agent from its own checkpoint and re-pushes its outputs
         into *ctx* so that downstream agents see upstream data.
         """
+        repopulated = 0
+        total_done = sum(1 for n in graph._nodes.values() if n.state == TaskState.DONE)
         for node in graph._nodes.values():
             if node.state != TaskState.DONE:
                 continue
             try:
                 agent = await self._create_or_restore_agent(node, ctx)
                 agent._repopulate_task_context()
+                repopulated += 1
             except Exception as e:
                 logger.warning(
                     "Could not repopulate artifacts for %s: %s",
                     node.task_id, e,
                 )
+        if repopulated < total_done:
+            logger.warning(
+                "Repopulated %d/%d completed agents — some upstream data may be missing.",
+                repopulated, total_done,
+            )
 
     # ------------------------------------------------------------------
     # Internal scheduling

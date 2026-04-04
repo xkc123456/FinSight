@@ -121,6 +121,7 @@ class Config:
         
         self._set_dirs()
         self._set_llms()
+        self._validate_default_models()
         self._set_rate_limiter()
 
     
@@ -215,6 +216,23 @@ class Config:
             llm_dict[model_name] = llm
         self.llm_dict = llm_dict
             
+    def _validate_default_models(self) -> None:
+        """Warn if default model names are not in llm_dict."""
+        import warnings
+        for prop_name, label in [
+            ("default_llm_name", "default_llm_name"),
+            ("default_vlm_name", "default_vlm_name"),
+        ]:
+            name = getattr(self, prop_name)
+            if name and name not in self.llm_dict:
+                warnings.warn(
+                    f"{label}={name!r} is not in llm_config_list. "
+                    f"Available models: {list(self.llm_dict.keys())}. "
+                    f"Pipeline may fail at runtime.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
     def _set_rate_limiter(self):
         """Initialize the global rate limiter from config."""
         from src.utils.rate_limiter import RateLimiter

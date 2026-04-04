@@ -79,6 +79,19 @@ class ReportPlugin(ABC):
         """Return the full path to a named template file."""
         return self.get_template_dir() / name
 
+    def get_default_reference_doc(self) -> Path | None:
+        """Default reference doc for pandoc. Returns None if not bundled."""
+        p = self.get_template_dir() / "report_template.docx"
+        return p if p.exists() else None
+
+    def get_default_outline_template(self) -> Path | None:
+        """Default outline template. Returns None if not bundled."""
+        for name in ("outline.md", "outline_zh.md"):
+            p = self.get_template_dir() / name
+            if p.exists():
+                return p
+        return None
+
     # -- DAG builder -----------------------------------------------------
     def build_task_graph(
         self,
@@ -154,6 +167,18 @@ class ReportPlugin(ABC):
             ))
 
         # -- Report (soft-depend on all analyzers, min=1) ----------------
+        # Inject plugin-provided template paths as fallbacks (config can override)
+        report_input = {
+            "task": target_desc,
+            "task_type": ctx.target_type,
+        }
+        ref_doc = self.get_default_reference_doc()
+        if ref_doc is not None and not config.config.get("reference_doc_path"):
+            config.config["reference_doc_path"] = str(ref_doc)
+        outline_tpl = self.get_default_outline_template()
+        if outline_tpl is not None and not config.config.get("outline_template_path"):
+            config.config["outline_template_path"] = str(outline_tpl)
+
         graph.add_task(TaskNode(
             task_id="report",
             agent_class=ReportGenerator,
@@ -162,14 +187,12 @@ class ReportPlugin(ABC):
                 "use_embedding_name": use_embedding_name,
             },
             run_kwargs={
-                "input_data": {
-                    "task": target_desc,
-                    "task_type": ctx.target_type,
-                },
+                "input_data": report_input,
                 "echo": True,
                 "max_iterations": 20,
                 "enable_chart": flags.enable_chart,
                 "add_introduction": flags.add_introduction,
+                "add_cover_page": flags.add_cover_page,
                 "add_reference_section": flags.add_references,
             },
             soft_depends_on=list(analyzer_ids),

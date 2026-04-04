@@ -64,6 +64,13 @@ class BaseAgent:
         
         self.use_llm_name = use_llm_name
         self.llm = self.config.llm_dict[use_llm_name]
+        if memory is not None:
+            import warnings
+            warnings.warn(
+                "The 'memory' parameter is deprecated. Use 'task_context' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.memory = memory
         self.task_context = task_context
         self.checkpoint_mgr = None  # set by Pipeline when using new core
@@ -123,6 +130,10 @@ class BaseAgent:
                     continue
             self.logger.info(f"[{self.AGENT_NAME}] Phase: {name}")
             await fn()
+            if self.checkpoint_mgr is not None:
+                self.checkpoint_mgr.save_agent(
+                    self.id, name, self._get_checkpoint_state()
+                )
 
     def _get_checkpoint_state(self) -> dict:
         """Return state dict for phase-level checkpointing. Override in subclass."""

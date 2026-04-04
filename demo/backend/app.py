@@ -35,6 +35,7 @@ class LLMConfig(BaseModel):
 class SystemConfig(BaseModel):
     target_name: str
     stock_code: str
+    target_type: str = "financial_company"
     output_dir: str = "outputs/demo"
     reference_doc_path: Optional[str] = "src/template/report_template.docx"
     outline_template_path: Optional[str] = "src/template/company_outline.md"
@@ -587,7 +588,7 @@ async def run_report_generation(resume: bool = False):
         config_dict = {
             "output_dir": current_config.output_dir,
             "target_name": current_config.target_name,
-            "target_type": "financial_company",
+            "target_type": current_config.target_type,
             "stock_code": current_config.stock_code,
             "reference_doc_path": current_config.reference_doc_path,
             "outline_template_path": current_config.outline_template_path,

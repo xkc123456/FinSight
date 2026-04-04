@@ -361,11 +361,10 @@ class ReportGenerator(BaseAgent):
         return report
 
     async def _add_cover_page(self, input_data, report):
-        pipeline_type = input_data.get('target_type', '')
-        if pipeline_type not in ('company', 'financial_company'):
+        if not self.add_cover_page:
             return report
-        stock_code = input_data.get('stock_code', '')
-        if stock_code == "":
+        stock_code = self.task_context.stock_code if self.task_context else input_data.get('stock_code', '')
+        if not stock_code:
             return report
 
         output_str = "\n\n## Company Fundamentals\n\n"
@@ -616,6 +615,7 @@ class ReportGenerator(BaseAgent):
         checkpoint_name: str = 'report_latest.pkl',
         enable_chart = True,
         add_introduction: bool = None,
+        add_cover_page: bool = False,
         add_reference_section: bool = True
     ) -> dict:
         """
@@ -633,6 +633,7 @@ class ReportGenerator(BaseAgent):
         
         # Configure post-processing options from plugin flags (passed via run_kwargs)
         self.add_introduction = add_introduction if add_introduction is not None else True
+        self.add_cover_page = add_cover_page
         self.add_reference_section = add_reference_section
         
         # Shared mutable state across phases

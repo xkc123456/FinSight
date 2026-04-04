@@ -58,13 +58,7 @@ class DeepSearchAgent(BaseAgent):
         if not query:
             raise ValueError("Input data must contain a 'task' key.")
         
-        # Get target language from config
-        target_language = self.config.config.get('language', 'zh')
-        language_mapping = {
-            'zh': 'Chinese (中文)',
-            'en': 'English'
-        }
-        target_language_name = language_mapping.get(target_language, target_language)
+        target_language_name = self._get_language_display_name()
             
         return [{
             "role": "user",

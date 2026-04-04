@@ -399,7 +399,7 @@ class DataAnalyzer(BaseAgent):
         return None, None
     
     def _get_persist_extra_state(self) -> Dict[str, Any]:
-        return {}
+        return {'phase_state': getattr(self, '_phase_state', {})}
 
     def _load_persist_extra_state(self, state: Dict[str, Any]):
         self._phase_state = state.get('phase_state', {})
