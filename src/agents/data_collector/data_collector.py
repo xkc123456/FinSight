@@ -20,6 +20,7 @@ class DataCollector(BaseAgent):
         task_context = None,
         tool_categories: list[str] | None = None,
     ):
+        self._tool_categories = tool_categories
         super().__init__(
             config=config,
             tools=tools,
@@ -36,7 +37,6 @@ class DataCollector(BaseAgent):
         self.DATA_COLLECT_PROMPT = self.prompt_loader.get_prompt('data_collect')
         
         self.collected_data_list: List[ToolResult] = []
-        self._tool_categories = tool_categories
         if self.tools == []:
             self._set_default_tools()
         

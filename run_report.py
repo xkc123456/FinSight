@@ -41,7 +41,7 @@ async def run_report(
     )
 
     graph = await pipeline.run(ctx, resume=resume, plugin=plugin)
-    logger.info("All tasks completed. DAG: %s", graph.summary())
+    logger.info(f"All tasks completed. DAG: {graph.summary()}")
 
 
 def main() -> None:

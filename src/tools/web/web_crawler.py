@@ -14,7 +14,12 @@ from io import BytesIO
 import pdfplumber
 import chardet
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+try:
+    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+    _HAS_CRAWL4AI = True
+except ImportError:
+    _HAS_CRAWL4AI = False
+
 from openai import OpenAI
 from bs4 import BeautifulSoup
 
@@ -87,21 +92,21 @@ class Click(Tool):
         if isinstance(urls, str):
             urls = [urls]
         try:
-            browser_conf = BrowserConfig(headless=True)  # or False to see the browser
-            run_conf = CrawlerRunConfig(
-                cache_mode=CacheMode.BYPASS
-            )
             result_list = []
             for url in urls:
                 if url.endswith(".pdf"):
                     content = await self.extract_pdf_text_async(url)
-                else:
+                elif _HAS_CRAWL4AI:
+                    browser_conf = BrowserConfig(headless=True)
+                    run_conf = CrawlerRunConfig(
+                        cache_mode=CacheMode.BYPASS
+                    )
                     async with AsyncWebCrawler(config=browser_conf) as crawler:
                         result = await crawler.arun(url=url, config=run_conf)
                         content = str(result.markdown)
-                    
-                    # use naive requests with async to get the content
-                    # content = await self.fetch_url(url)
+                else:
+                    # Fallback: plain HTTP fetch when crawl4ai is not installed
+                    content = await self.fetch_url(url)
 
                 # if task == '' or len(content) < 10000:
                 result_list.append(
