@@ -1,0 +1,17 @@
+data_api_outline: "### Interface 1: get_data\nFetch one of the preloaded datasets.\n- **Parameters**: `data_id` (int) – Index\
+  \ from the available data list (starting from 0).\n- **Returns**: the dataset in its native Python type (DataFrame, dict,\
+  \ etc.).\n```python\ndata = get_data(0)  # Get the first dataset\nprint(data)\n```\n\n### Interface 2: get_analysis_result\n\
+  Retrieve existing analysis results that match your query.\n- **Parameters**: `id` (int) – Index from the available analysis\
+  \ results list (starting from 0).\n- **Returns**: A formatted string containing the analysis report content, including charts\
+  \ and insights.\n\n**CRITICAL - Context Management**: \nWhen you call this function, the full analysis report will be returned.\
+  \ However, to prevent context overflow:\n1. **After reading each analysis result, you MUST carefully think and summarize\
+  \ the key insights.**\n2. **Extract ONLY the information relevant to your current writing task** - focus on data points,\
+  \ conclusions, and chart names that directly support your outline.\n3. **Write a concise summary (3-5 bullet points max)**\
+  \ of what you learned and how it will be used in the report.\n4. **IMPORTANT**: Once context becomes too long, the system\
+  \ will hide the original execution output. You will ONLY have access to your own summaries. Therefore, make your summaries\
+  \ actionable and specific.\n\n```python\nanalysis = get_analysis_result(0)  # Get the first analysis result\nprint(analysis)\n\
+  # After reviewing the output, immediately summarize key takeaways in your response\n```\n\n### Interface 3: get_data_from_deep_search\n\
+  Call the deep-search agent to pull fresh facts or viewpoints from the public web.\n- **Parameters**: `query` (str) – A specific,\
+  \ well-scoped description of the information you need.\n- **Returns**: A summarized text containing the findings and source\
+  \ links.\n```python\ninsight = get_data_from_deep_search(\"Latest supply chain developments for BYD\")\nprint(insight)\n\
+  ```\n"

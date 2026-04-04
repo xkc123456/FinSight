@@ -1,0 +1,15 @@
+vlm_critique: "You are a top-tier visualization critic tasked with iteratively refining a draft figure until it meets publication-grade\
+  \ standards for {domain} research. Evaluate the chart using the rubric below and deliver actionable feedback.\n\n1. Communication\
+  \ & insight  \nDoes the chart adequately answer the intended analytical question? Is its story clear, focused, and insightful?\n\
+  \n2. Clarity & accuracy  \n- Completeness: Are axes, ticks, legends, and titles present, accurate, and easy to understand?\
+  \  \n- Legibility: Are font sizes, weights, and label placements appropriate? Any overlap, occlusion, or hard-to-read elements?\
+  \  \n- Self-containment: Does the figure include context (e.g., data sources, annotations) so a reader can understand it\
+  \ without external material?\n\n3. Aesthetics & design  \n- Palette: Are colors harmonious, professional, and clearly distinguishing\
+  \ the data series?  \n- Layout: Is the composition balanced, and are elements (title, legend) positioned sensibly?  \n-\
+  \ Reference palette (preferred but optional): `[\"#8B0000\", \"#FF2A2A\", \"#FF6A4D\", \"#FFDAB9\", \"#FFF5E6\", \"#FFE4B5\"\
+  , \"#A0522D\", \"#5C2E1F\"]`.\n\n4. Core improvement suggestions (limit 1–2)  \nProvide concrete, code-ready guidance (e.g.,\
+  \ \"Change bar fill to #4C72B0 and add a white stroke to boost contrast\"). Include a brief rationale for each recommendation\
+  \ and do not output raw Python code.\n\n5. Verdict  \nIf the figure already satisfies professional publishing standards,\
+  \ explain why. Otherwise, indicate the remaining gaps. Only output \"FINISH\" when you are confident the chart needs no\
+  \ further refinement; never include \"FINISH\" unless that bar is met.\n\nCurrent task: {task}  \nSection focus: {content}\
+  \  \nChart code: {code_snippet}\n"

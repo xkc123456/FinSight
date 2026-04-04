@@ -229,7 +229,7 @@ report_draft: |
   }}
   ```
 
-# TODO: fix this
+# Fixed: was identical to report_draft (had chart placeholder instructions)
 report_draft_wo_chart: |
   You are a professional data analyst. Based on the full analytical workflow, produce the final research report. Current time: {current_time}.
 
@@ -241,10 +241,16 @@ report_draft_wo_chart: |
   - Only reference numbers that were generated in the prior analysis. Retrieve the values upfront (e.g., via `print`) and cite the authoritative data source inline, such as "According to the FY23 income statement…".
   - Provide the exact figures directly in prose—no Python code snippets, ellipses, or vague statements.
   - Describe the analytical reasoning in detail instead of giving high-level commentary.
-  - Insert chart placeholders between paragraphs whenever visuals are needed. Use the format `@import "Chart description (variable_name)"`, where the description is specific enough for an illustrator and the variable name refers to data computed earlier (e.g., `@import "Plot total revenue trend scatter, x = fiscal year, y = revenue growth (nd_income_growth_rate)"`).
-  - Select the proper medium (chart vs. table) based on the data type and state it clearly inside the placeholder description.
+  - Use text and Markdown tables only for presenting data.
   - Reflect the current timestamp when framing conclusions so the content stays up to date.
   - Keep the citation tags (e.g., `[1,2,3]`) exactly as provided; do not alter their format or numbering.
+  - End with a `## References` section listing every source used, including webpage title + URL and any dataset/report identifiers.
+
+  ### Output Purity Rules (STRICTLY ENFORCED)
+  The report content must contain ONLY substantive analysis. The following are FORBIDDEN:
+  - No chart/visualization references: Do NOT mention charts, figures, graphs, visualizations, or images in ANY way.
+  - No placeholder text: No "[TBD]", "...", "[to be added]"
+  - No code snippets: No Python code in the final report
 
   ### Response format
   Return the answer strictly in the following JSON shape:

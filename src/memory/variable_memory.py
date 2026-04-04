@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import warnings
 import dill
 import asyncio
 import datetime
@@ -25,6 +26,12 @@ class Memory:
         self,
         config: Config,
     ):
+        warnings.warn(
+            "Memory is deprecated and will be removed in a future release. "
+            "Use src.core.task_context.TaskContext instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         self.config = config
         self.save_dir = os.path.join(config.working_dir, "memory")

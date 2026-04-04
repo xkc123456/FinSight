@@ -2,7 +2,6 @@ from typing import List, Dict, Any, Tuple
 import asyncio
 import os
 import re
-import copy
 import subprocess
 import numpy as np
 import docx2pdf
@@ -14,6 +13,8 @@ from src.agents.report_generator.report_class import Report, Section
 from src.utils.helper import extract_markdown, get_md_img
 from src.utils.index_builder import IndexBuilder
 from src.utils.figure_helper import draw_kline_chart
+
+
 class ReportGenerator(BaseAgent):
     AGENT_NAME = 'report_generator'
     AGENT_DESCRIPTION = 'a agent that can generate report from the data'
@@ -26,7 +27,8 @@ class ReportGenerator(BaseAgent):
         use_embedding_name: str = "qwen3-embedding",
         enable_code = True,
         memory = None,
-        agent_id: str = None
+        agent_id: str = None,
+        task_context = None,
     ):
         super().__init__(
             config=config,
@@ -34,18 +36,13 @@ class ReportGenerator(BaseAgent):
             use_llm_name=use_llm_name,
             enable_code=enable_code,
             memory=memory,
-            agent_id=agent_id
+            agent_id=agent_id,
+            task_context=task_context,
         )
         # Load prompts based on language and target type settings
         from src.utils.prompt_loader import get_prompt_loader
         
-        target_language = self.config.config.get('language', 'zh')
-        language_mapping = {
-            'zh': 'Chinese (中文)',
-            'en': 'English'
-        }
-        target_language_name = language_mapping.get(target_language, target_language)
-        self.target_language_name = target_language_name
+        self.target_language_name = self._get_language_display_name()
         target_type = self.config.config.get('target_type', 'general')
         
         
@@ -72,12 +69,6 @@ class ReportGenerator(BaseAgent):
         self.TABLE_BEAUTIFY_PROMPT = self.prompt_loader.get_prompt('table_beautify')
         
         self.use_embedding_name = use_embedding_name
-        # Phase checkpoints: outline → sections → post_process
-        self._phase: str = 'outline'
-        # Section-level progress counter
-        self._section_index_done: int = 0
-        # Post-process sub-stages: 0-image, 1-abstract/title, 2-cover, 3-reference, 4-render
-        self._post_stage: int = 0
         
 
     def _set_default_tools(self):
@@ -85,11 +76,30 @@ class ReportGenerator(BaseAgent):
         Attach the default tools/agents required by the report generator.
         """
         tool_list = []
-        # Attach the deep-search agent (sharing the same memory)
-        tool_list.append(DeepSearchAgent(config=self.config, use_llm_name=self.use_llm_name, memory=self.memory))
-        for tool in tool_list:
-            self.memory.add_dependency(tool.id, self.id)
+        tool_list.append(DeepSearchAgent(
+            config=self.config, use_llm_name=self.use_llm_name,
+            memory=self.memory, task_context=self.task_context,
+        ))
+        if self.memory is not None:
+            for tool in tool_list:
+                self.memory.add_dependency(tool.id, self.id)
         self.tools = tool_list
+
+    def _get_collect_data(self, exclude_type=None):
+        """Get collected data from task_context or memory."""
+        if self.task_context is not None:
+            return self.task_context.get("collected_data")
+        if self.memory is not None:
+            return self.memory.get_collect_data(exclude_type=exclude_type or [])
+        return []
+
+    def _get_analysis_results(self):
+        """Get analysis results from task_context or memory."""
+        if self.task_context is not None:
+            return self.task_context.get("analysis_results")
+        if self.memory is not None:
+            return self.memory.get_analysis_result()
+        return []
     
     async def _prepare_executor(self):
         """
@@ -97,8 +107,8 @@ class ReportGenerator(BaseAgent):
         """
         current_task_data = self.current_task_data
         tool_list = self.tools
-        collect_data_list = self.memory.get_collect_data(exclude_type=['search', 'click'])
-        analysis_result_list = self.memory.get_analysis_result()
+        collect_data_list = self._get_collect_data(exclude_type=['search', 'click'])
+        analysis_result_list = self._get_analysis_results()
         
         def _get_data(data_id: int):
             """Get dataset by index"""
@@ -146,8 +156,8 @@ class ReportGenerator(BaseAgent):
         data_api_description = self.prompt_loader.get_prompt('data_api')
         
         # Prepare data information for the agent
-        collect_data_list = self.memory.get_collect_data(exclude_type=['search', 'click'])
-        analysis_result_list = self.memory.get_analysis_result()
+        collect_data_list = self._get_collect_data(exclude_type=['search', 'click'])
+        analysis_result_list = self._get_analysis_results()
         data_info = "\n\n## Available Datas\n\n"
         for idx, item in enumerate(collect_data_list):
             data_info += f"**Data ID {idx}:**\n{item.brief_str()}\n\n"
@@ -220,7 +230,7 @@ class ReportGenerator(BaseAgent):
         }
     
     async def _final_polish(self, section_input_data, draft_section: str):
-        all_analysis_result = self.memory.get_analysis_result()
+        all_analysis_result = self._get_analysis_results()
         all_image_list = []
         for analysis_result in all_analysis_result:
             all_image_list.extend(analysis_result.get_all_img())
@@ -256,7 +266,7 @@ class ReportGenerator(BaseAgent):
             return name.replace(".png", "").replace(".jpg", "").replace(".jpeg", "").replace(".md", "")
         def is_image_file(name: str):
             return name.endswith(".png") or name.endswith(".jpg") or name.endswith(".jpeg") or name.endswith(".md")
-        all_analysis_result = self.memory.get_analysis_result()
+        all_analysis_result = self._get_analysis_results()
         img_captions = []
         img_paths = []
         for analysis_result in all_analysis_result:
@@ -371,7 +381,7 @@ class ReportGenerator(BaseAgent):
 
         output_str = "\n\n## Company Fundamentals\n\n"
         # Three statements + shareholder profile
-        collect_data_list = self.memory.get_collect_data()
+        collect_data_list = self._get_collect_data()
         table_configs = [
             ("Income statement", "Income Statement"),
             ("Balance sheet", "Balance Sheet"),
@@ -439,16 +449,16 @@ class ReportGenerator(BaseAgent):
         """
         Append the reference-data section and replace placeholder citations.
         """
-        collect_data_list = self.memory.get_collect_data() # only use data, without analysis result
+        collect_data_list = self._get_collect_data()  # only use data, without analysis result
         all_data = []
         for item in collect_data_list:
-            # TODO: directly set these keys in ToolResult
-            name = item.name + '\n' + item.description # used for index
-            content = item.source # used for display citation
-            # for url, find the title in search results
+            name = item.name + '\n' + item.description
+            content = item.source
             if isinstance(item, ClickResult):
                 url = item.link
-                title = self.memory.get_url_title(url)
+                title = ""
+                if self.memory is not None:
+                    title = self.memory.get_url_title(url)
                 if title == "":
                     title = item.name
                 content = f"{title}\n{url}"
@@ -522,169 +532,11 @@ class ReportGenerator(BaseAgent):
         report.sections.append(new_section)
         return report
 
-        
-
-    async def post_process_report(self, input_data, report):
-        """
-        Post-process the report while saving progress between sub-stages:
-          0: replace image paths
-          1: add abstract and title
-          2: add cover/basic data page
-          3: add reference data section
-          4: render to docx
-        """
-        current_state = {
-            'phase': 'post_process',
-            'post_stage': self._post_stage,
-            'report_obj': report,
-        }
-        # 0 Replace image paths
-        if self._post_stage <= 0:
-            self.logger.info("[Phase2] Step 0: replace image paths")
-            report = await self._replace_image_path(report)
-            self._post_stage = 1
-            current_state['report_obj_stage1'] = copy.deepcopy(report)
-            current_state['report_obj'] = report
-            current_state['post_stage'] = self._post_stage
-            await self.save(state=current_state, checkpoint_name='report_latest.pkl')
-            self.logger.info("[Phase2] Step 0 done, checkpoint saved")
-
-        # 1 Add abstract/title (conditional based on add_introduction setting)
-        if self._post_stage <= 1:
-            if getattr(self, 'add_introduction', True):
-                self.logger.info("[Phase2] Step 1: add abstract and title")
-                report = await self._add_abstract(input_data, report)
-            else:
-                self.logger.info("[Phase2] Step 1: skipping abstract/introduction (add_introduction=False for general reports)")
-                # Still generate a better title
-                new_title = await self.llm.generate(
-                    messages = [
-                    {
-                        'role': 'user',
-                        'content': self.TITLE_PROMPT.format(target_language=self.target_language_name, report_content=report.content)
-                    }
-                ])
-                new_title = new_title.replace("#","").strip()
-                report._content = f"# {new_title}\n\n"
-            self._post_stage = 2
-            current_state['report_obj_stage2'] = copy.deepcopy(report)
-            current_state['report_obj'] = report
-            current_state['post_stage'] = self._post_stage
-            await self.save(state=current_state, checkpoint_name='report_latest.pkl')
-            self.logger.info("[Phase2] Step 1 done, checkpoint saved")
-
-        # 2 Add cover/basic data page
-        if self._post_stage <= 2:
-            self.logger.info("[Phase2] Step 2: add cover/basic data page")
-            report = await self._add_cover_page(input_data, report)
-            self._post_stage = 3
-            current_state['report_obj_stage3'] = copy.deepcopy(report)
-            current_state['report_obj'] = report
-            current_state['post_stage'] = self._post_stage
-            await self.save(state=current_state, checkpoint_name='report_latest.pkl')
-            self.logger.info("[Phase2] Step 2 done, checkpoint saved")
-
-        # 3 Add references (conditional based on add_reference_section setting)
-        if self._post_stage <= 3:
-            if getattr(self, 'add_reference_section', True):
-                self.logger.info("[Phase2] Step 3: add references")
-                report = await self._add_reference(report)
-            else:
-                self.logger.info("[Phase2] Step 3: skipping reference section (add_reference_section=False)")
-            self._post_stage = 4
-            current_state['report_obj_stage4'] = copy.deepcopy(report)
-            current_state['report_obj'] = report
-            current_state['post_stage'] = self._post_stage
-            await self.save(state=current_state, checkpoint_name='report_latest.pkl')
-            self.logger.info("[Phase2] Step 3 done, checkpoint saved")
-
-        # 4 Render to docx
-        if self._post_stage <= 4:
-            self.logger.info("[Phase2] Step 4: render report to docx")
-            working_dir = self.config.config['working_dir']
-            md_path = os.path.join(working_dir, f'{report.title}.md')
-            docx_path = os.path.join(working_dir, f'{report.title}.docx')
-            content = report.content
-            content = content.replace("```markdown", "").replace("```", "")
-            with open(md_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            media_dir = os.path.join(working_dir, "media")
-            reference_doc = self.config.config['reference_doc_path']
-            pandoc_cmd = [
-                "pandoc",
-                md_path,
-                "-o",
-                docx_path,
-                "--standalone",
-                "--toc",
-                "--toc-depth=3",
-                f"--resource-path={working_dir}",
-                f"--reference-doc={reference_doc}"
-            ]
-            if os.path.exists(media_dir):
-                pandoc_cmd.append(f"--extract-media={media_dir}")
-            print(" ".join(pandoc_cmd))
-            env = os.environ.copy()
-            env['PYTHONIOENCODING'] = 'utf-8'
-            subprocess.run(pandoc_cmd, check=True, capture_output=True, text=True, encoding='utf-8', env=env)
-            
-            # Validate output is non-empty
-            if not os.path.exists(md_path) or os.path.getsize(md_path) == 0:
-                self.logger.error(
-                    f"Report output is empty: {md_path}. "
-                    "This usually means sections produced no content. "
-                    "Check section generation logs for errors."
-                )
-
-            pdf_path = docx_path.replace(".docx", ".pdf")
-            try:
-                docx2pdf.convert(docx_path, pdf_path)
-            except Exception as e:
-                self.logger.error(f"Failed to convert docx to pdf: {e}", exc_info=True)
-            self._post_stage = 5
-            current_state['rendered_md'] = md_path
-            current_state['rendered_docx'] = docx_path
-            current_state['finished'] = True
-            await self.save(state=current_state, checkpoint_name='report_latest.pkl')
-            self.logger.info(f"[Phase2] Step 4 done, rendered files: md={md_path}, docx={docx_path}, pdf={pdf_path}")
-        return report
-
     def _get_persist_extra_state(self) -> Dict[str, Any]:
-        """
-        Provide extra state so parent persistence can restore the pipeline stages.
-        """
-        return {
-            'phase': getattr(self, '_phase', 'outline'),
-            'section_index': getattr(self, '_section_index_done', 0),
-            'post_stage': getattr(self, '_post_stage', 0),
-        }
+        return {}
 
     def _load_persist_extra_state(self, state: Dict[str, Any]):
-        """
-        Restore stage metadata from a checkpoint.
-        """
-        # Recover from the extra field populated by _get_persist_extra_state
-        extra = state.get('extra', {})
-        
-        phase = extra.get('phase') or state.get('phase')
-        if isinstance(phase, str):
-            self._phase = phase
-        
-        section_index = extra.get('section_index') or state.get('section_index')
-        if section_index is not None:
-            try:
-                self._section_index_done = int(section_index)
-            except Exception:
-                pass
-        
-        post_stage = extra.get('post_stage') or state.get('post_stage')
-        if post_stage is not None:
-            try:
-                self._post_stage = int(post_stage)
-            except Exception:
-                pass
-        
-        enable_chart = extra.get('enable_chart') or state.get('enable_chart')
+        enable_chart = state.get('enable_chart')
         if enable_chart is not None:
             try:
                 self.enable_chart = bool(enable_chart)
@@ -704,7 +556,7 @@ class ReportGenerator(BaseAgent):
                 outline_template = f.read()
         # Prepare data API description and available analysis info
         data_api_description = self.prompt_loader.get_prompt('data_api_outline')
-        analysis_result_list = self.memory.get_analysis_result()
+        analysis_result_list = self._get_analysis_results()
         
         data_info = "You have access to the following analysis results:\n\n"
         for idx, result in enumerate(analysis_result_list):
@@ -774,159 +626,241 @@ class ReportGenerator(BaseAgent):
         input_data: dict, 
         max_iterations: int = 10,
         stop_words: list[str] = [],
-        # stop_words: list[str] = ["</draft>", "</outline>", "</report>", "</execute>"],
         echo=False,
         resume: bool = True,
         checkpoint_name: str = 'report_latest.pkl',
         enable_chart = True,
-        add_introduction: bool = None,  # None means auto-detect based on target_type
+        add_introduction: bool = None,
         add_reference_section: bool = True
     ) -> dict:
         """
-        Three-stage execution flow for the report generator:
-        Phase 0: outline creation
-        Phase 1: per-section drafting
-        Phase 2: post processing
+        Phase-based execution flow using _run_phases:
+          1. outline: generate report outline
+          2. sections: per-section drafting
+          3. replace_images: replace image placeholders
+          4. abstract_title: add abstract and title
+          5. cover_page: add cover/basic data page
+          6. references: add reference section
+          7. render: render to docx/pdf
         """
-        # Initialize/restore stage state
-        report = None
-        start_index = 0
         self.enable_chart = enable_chart
         input_data['max_iterations'] = max_iterations
         
         # Configure post-processing options based on target_type
         target_type = self.config.config.get('target_type', 'general')
-        
-        # For general/deep-research reports, default to NO introduction (user specifies their own structure)
-        # For company/financial reports, default to YES (standard report format)
         if add_introduction is None:
             self.add_introduction = target_type not in ['general']
         else:
             self.add_introduction = add_introduction
-        
         self.add_reference_section = add_reference_section
         
+        # Shared mutable state across phases
+        self._rg_state: Dict[str, Any] = {
+            'report': None,
+            'section_index_done': 0,
+        }
+
+        # Determine resume phase
+        start_from = None
         if resume:
             state = await self.load(checkpoint_name=checkpoint_name)
             if state is not None:
-                # Restore extra metadata
                 self._load_persist_extra_state(state)
-                self.logger.info(f"[Resume] phase={getattr(self, '_phase', None)}, section_index={getattr(self, '_section_index_done', None)}, post_stage={getattr(self, '_post_stage', None)}")
-                
-                # If the workflow already finished, return the saved report
                 if state.get('finished'):
                     restored_report = state.get('report_obj')
                     if restored_report:
                         self.logger.info("Report already completed, restoring from checkpoint")
                         return restored_report
-                
-                # Restore an in-progress report if available
-                restored_report = state.get('report_obj')
-                if restored_report is not None:
-                    report = restored_report
-                    start_index = self._section_index_done
-                    self.logger.info(f"[Resume] Restored report object, will resume from section_index={start_index}")
-        
-        # Phase 0: outline generation
-        if self._phase == 'outline' or report is None:
-            self.logger.info("[Phase0] Generating Report Outline")
+                self._rg_state['report'] = state.get('report_obj')
+                self._rg_state['section_index_done'] = state.get('section_index', 0)
+                start_from = state.get('resume_phase')
+
+        async def _phase_outline():
+            self.logger.info("[Phase] Generating Report Outline")
             report = await self.generate_outline(
-                input_data, 
+                input_data,
                 max_iterations=max_iterations,
                 stop_words=stop_words,
                 echo=echo,
                 resume=resume,
-                checkpoint_name='outline_latest.pkl'
+                checkpoint_name='outline_latest.pkl',
             )
-            self._phase = 'sections'
-            # Persist outline state
+            self._rg_state['report'] = report
             await self.save(
                 state={
-                    'phase': self._phase,
+                    'resume_phase': 'sections',
                     'report_obj': report,
                     'input_data': input_data,
                     'enable_chart': self.enable_chart,
                 },
                 checkpoint_name=checkpoint_name,
             )
-            self.memory.save()
-            self.logger.info(f"[Phase0] Completed: outline sections={len(report.sections)}")
+            if self.memory is not None:
+                self.memory.save()
+            self.logger.info(f"[Phase] Outline completed: sections={len(report.sections)}")
 
-        
-        # Phase 1: per-section generation
-        if self._phase == 'sections':
-            self.logger.info("[Phase1] Begin generating sections")
-            # TODO: parallel generation of sections
+        async def _phase_sections():
+            report = self._rg_state['report']
+            start_index = self._rg_state.get('section_index_done', 0)
+            self.logger.info(f"[Phase] Begin generating sections (start={start_index})")
             for idx, section in enumerate(report.sections):
                 if idx < start_index:
                     continue
                 section_input_data = input_data.copy()
                 section_input_data['section_outline'] = section.outline
-                self.logger.info(f"[Phase1] Section {idx+1}/{len(report.sections)} start")
-                
-                # Prepare executor with data access functions for agentic workflow
+                self.logger.info(f"[Phase] Section {idx+1}/{len(report.sections)} start")
                 await self._prepare_executor()
-                
-                # Each section run has its own checkpoint for resume support
-                section_result = await super().async_run(
+                section_result = await super(ReportGenerator, self).async_run(
                     input_data=section_input_data,
                     max_iterations=max_iterations,
                     stop_words=stop_words,
                     echo=echo,
                     resume=resume and idx == start_index,
-                    checkpoint_name=f'section_{idx}.pkl'
+                    checkpoint_name=f'section_{idx}.pkl',
                 )
                 draft_section = section_result['final_result']
-                self.logger.debug(f"[Phase1] Draft section length={len(draft_section)}")
-                
-                # Final polish for the section content
                 final_section = await self._final_polish(section_input_data, draft_section)
-                self.logger.debug(f"[Phase1] Final section length={len(final_section)}")
-                self.memory.add_log(
-                    id=self.id,
-                    type=self.type,
-                    input_data=section_input_data,
-                    output_data=section_result,
-                    error=False,
-                    note=f"Report generator executed successfully"
-                )
-                section.set_content(final_section) 
-                # Save global progress after each section to resume later
+                if self.memory is not None:
+                    self.memory.add_log(
+                        id=self.id, type=self.type,
+                        input_data=section_input_data, output_data=section_result,
+                        error=False, note="Report generator executed successfully",
+                    )
+                section.set_content(final_section)
+                self._rg_state['section_index_done'] = idx + 1
                 await self.save(
                     state={
-                        'phase': 'sections',
+                        'resume_phase': 'sections',
                         'section_index': idx + 1,
                         'report_obj': report,
                         'input_data': input_data,
                     },
                     checkpoint_name=checkpoint_name,
                 )
-                self.memory.save()
-                # Update in-memory progress pointer
-                self._section_index_done = idx + 1
-                self.logger.info(f"[Phase1] Section {idx+1} done, checkpoint saved (section_index={self._section_index_done})")
-            
-            # Move to post-process stage once all sections are done
-            self._phase = 'post_process'
+                if self.memory is not None:
+                    self.memory.save()
+                self.logger.info(f"[Phase] Section {idx+1} done")
             await self.save(
                 state={
-                    'phase': self._phase,
-                    'section_index': self._section_index_done,
-                    'post_stage': self._post_stage,
+                    'resume_phase': 'replace_images',
+                    'section_index': len(report.sections),
                     'report_obj': report,
                     'input_data': input_data,
                 },
                 checkpoint_name=checkpoint_name,
             )
-            self.memory.save()
-            self.logger.info("[Phase1] Completed: All sections generated")
+            if self.memory is not None:
+                self.memory.save()
+            self.logger.info("[Phase] All sections generated")
 
-        # Phase 2: post processing (resumable)
-        if self._phase == 'post_process':
-            self.logger.info("[Phase2] Begin post processing")
-            report = await self.post_process_report(input_data, report)
-            self.memory.save()
-            self.logger.info("[Phase2] Completed post processing")
+        async def _phase_replace_images():
+            report = self._rg_state['report']
+            self.logger.info("[Phase] Replace image paths")
+            self._rg_state['report'] = await self._replace_image_path(report)
+            await self.save(
+                state={'resume_phase': 'abstract_title', 'report_obj': self._rg_state['report']},
+                checkpoint_name=checkpoint_name,
+            )
 
-        return report
+        async def _phase_abstract_title():
+            report = self._rg_state['report']
+            if self.add_introduction:
+                self.logger.info("[Phase] Add abstract and title")
+                report = await self._add_abstract(input_data, report)
+            else:
+                self.logger.info("[Phase] Generate title only (no introduction)")
+                new_title = await self.llm.generate(
+                    messages=[{
+                        'role': 'user',
+                        'content': self.TITLE_PROMPT.format(
+                            target_language=self.target_language_name,
+                            report_content=report.content,
+                        )
+                    }]
+                )
+                new_title = new_title.replace("#", "").strip()
+                report._content = f"# {new_title}\n\n"
+            self._rg_state['report'] = report
+            await self.save(
+                state={'resume_phase': 'cover_page', 'report_obj': report},
+                checkpoint_name=checkpoint_name,
+            )
+
+        async def _phase_cover_page():
+            report = self._rg_state['report']
+            self.logger.info("[Phase] Add cover page")
+            self._rg_state['report'] = await self._add_cover_page(input_data, report)
+            await self.save(
+                state={'resume_phase': 'references', 'report_obj': self._rg_state['report']},
+                checkpoint_name=checkpoint_name,
+            )
+
+        async def _phase_references():
+            report = self._rg_state['report']
+            if self.add_reference_section:
+                self.logger.info("[Phase] Add references")
+                report = await self._add_reference(report)
+            else:
+                self.logger.info("[Phase] Skipping reference section")
+            self._rg_state['report'] = report
+            await self.save(
+                state={'resume_phase': 'render', 'report_obj': report},
+                checkpoint_name=checkpoint_name,
+            )
+
+        async def _phase_render():
+            report = self._rg_state['report']
+            self.logger.info("[Phase] Render to docx")
+            working_dir = self.config.config['working_dir']
+            md_path = os.path.join(working_dir, f'{report.title}.md')
+            docx_path = os.path.join(working_dir, f'{report.title}.docx')
+            content = report.content.replace("```markdown", "").replace("```", "")
+            with open(md_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            media_dir = os.path.join(working_dir, "media")
+            reference_doc = self.config.config['reference_doc_path']
+            pandoc_cmd = [
+                "pandoc", md_path, "-o", docx_path,
+                "--standalone", "--toc", "--toc-depth=3",
+                f"--resource-path={working_dir}",
+                f"--reference-doc={reference_doc}",
+            ]
+            if os.path.exists(media_dir):
+                pandoc_cmd.append(f"--extract-media={media_dir}")
+            print(" ".join(pandoc_cmd))
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            subprocess.run(pandoc_cmd, check=True, capture_output=True, text=True, encoding='utf-8', env=env)
+            if not os.path.exists(md_path) or os.path.getsize(md_path) == 0:
+                self.logger.error(
+                    f"Report output is empty: {md_path}. "
+                    "This usually means sections produced no content."
+                )
+            pdf_path = docx_path.replace(".docx", ".pdf")
+            try:
+                docx2pdf.convert(docx_path, pdf_path)
+            except Exception as e:
+                self.logger.error(f"Failed to convert docx to pdf: {e}", exc_info=True)
+            await self.save(
+                state={'finished': True, 'report_obj': report, 'rendered_md': md_path, 'rendered_docx': docx_path},
+                checkpoint_name=checkpoint_name,
+            )
+            self.logger.info(f"[Phase] Render done: md={md_path}, docx={docx_path}")
+            if self.memory is not None:
+                self.memory.save()
+
+        await self._run_phases(
+            phases=[
+                ('outline', _phase_outline),
+                ('sections', _phase_sections),
+                ('replace_images', _phase_replace_images),
+                ('abstract_title', _phase_abstract_title),
+                ('cover_page', _phase_cover_page),
+                ('references', _phase_references),
+                ('render', _phase_render),
+            ],
+            start_from=start_from,
+        )
+
+        return self._rg_state['report']
     

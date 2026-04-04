@@ -22,7 +22,8 @@ class DeepSearchAgent(BaseAgent):
         use_llm_name: str = "deepseek-chat",
         enable_code = False,
         memory = None,
-        agent_id: str = None
+        agent_id: str = None,
+        task_context = None,
     ):
         # Use search + click tools directly; no code interpreter required
         if tools is None:
@@ -33,12 +34,13 @@ class DeepSearchAgent(BaseAgent):
             use_llm_name=use_llm_name,
             enable_code=enable_code,
             memory=memory,
-            agent_id=agent_id
+            agent_id=agent_id,
+            task_context=task_context,
         )
-        # Load prompts using the new YAML-based loader
+        # Load prompts using the YAML-based loader with correct report type
         from src.utils.prompt_loader import get_prompt_loader
-        
-        self.prompt_loader = get_prompt_loader('search_agent', report_type='general')
+        target_type = self.config.config.get('target_type', 'general')
+        self.prompt_loader = get_prompt_loader('search_agent', report_type=target_type)
         self.DEEP_SEARCH_PROMPT = self.prompt_loader.get_prompt('deep_search')
         self.link2name = {}
         
@@ -122,27 +124,32 @@ class DeepSearchAgent(BaseAgent):
                     result += f"Summary: {description}\n\n"
                     
             for search_item in search_result:
-                self.memory.add_data(search_item)
-            self.memory.add_log(
-                id = search_engine.id, 
-                type=search_engine.type,
-                input_data = {'query': action_content}, 
-                output_data = {'result': search_result_list}, 
-                error=False, 
-                note=f"Search engine {search_engine.name} executed successfully"
-            )
+                if self.task_context is not None:
+                    self.task_context.put("collected_data", search_item)
+                if self.memory is not None:
+                    self.memory.add_data(search_item)
+            if self.memory is not None:
+                self.memory.add_log(
+                    id = search_engine.id, 
+                    type=search_engine.type,
+                    input_data = {'query': action_content}, 
+                    output_data = {'result': search_result_list}, 
+                    error=False, 
+                    note=f"Search engine {search_engine.name} executed successfully"
+                )
             self.logger.info(f"Search action done: query={action_content}")
                 
         except Exception as e:
             result = f"Query `{action_content}` failed with error: {str(e)}. Please retry."
-            self.memory.add_log(
-                id = search_engine.id, 
-                type=search_engine.type,
-                input_data = {'query': action_content}, 
-                output_data = {"result": result}, 
-                error=True, 
-                note=f"Search engine {search_engine.name} executed failed: {str(e)}"
-            )
+            if self.memory is not None:
+                self.memory.add_log(
+                    id = search_engine.id, 
+                    type=search_engine.type,
+                    input_data = {'query': action_content}, 
+                    output_data = {"result": result}, 
+                    error=True, 
+                    note=f"Search engine {search_engine.name} executed failed: {str(e)}"
+                )
             self.logger.error(f"Search action failed: query={action_content}, error={e}", exc_info=True)
         
         # On the last iteration, append available sources reminder
@@ -197,32 +204,37 @@ class DeepSearchAgent(BaseAgent):
                     'title': source_title,
                     'content_preview': result[:500] if len(result) > 500 else result
                 }
-            # add to memory
+            # add to memory / task_context
             if click_result[0].link in self.link2name:
                 click_result[0].name = self.link2name[click_result[0].link]
             if not ('error' in click_result[0].name.lower()):
-                self.memory.add_data(click_result[0])
-            self.memory.add_log(
-                id = click_engine.id, 
-                type=click_engine.type,
-                input_data = {'url': action_content}, 
-                output_data = {"result": result}, 
-                error=False, 
-                note=f"Click engine {click_engine.name} executed successfully"
-            )
+                if self.task_context is not None:
+                    self.task_context.put("collected_data", click_result[0])
+                if self.memory is not None:
+                    self.memory.add_data(click_result[0])
+            if self.memory is not None:
+                self.memory.add_log(
+                    id = click_engine.id, 
+                    type=click_engine.type,
+                    input_data = {'url': action_content}, 
+                    output_data = {"result": result}, 
+                    error=False, 
+                    note=f"Click engine {click_engine.name} executed successfully"
+                )
             self.logger.info(f"Click action done: url={action_content}")
             
         except Exception as e:
             result =  "Failed to fetch url: " + action_content + "\n"
             result += f'Error: {e}'
-            self.memory.add_log(
-                id = click_engine.id, 
-                type=click_engine.type,
-                input_data = {'url': action_content}, 
-                output_data = {"result": result}, 
-                error=True, 
-                note=f"Click engine {click_engine.name} executed failed: {str(e)}"
-            )
+            if self.memory is not None:
+                self.memory.add_log(
+                    id = click_engine.id, 
+                    type=click_engine.type,
+                    input_data = {'url': action_content}, 
+                    output_data = {"result": result}, 
+                    error=True, 
+                    note=f"Click engine {click_engine.name} executed failed: {str(e)}"
+                )
             self.logger.error(f"Click action failed: url={action_content}, error={e}", exc_info=True)
         
         # On the last iteration, append available sources reminder
@@ -316,7 +328,10 @@ class DeepSearchAgent(BaseAgent):
             data=run_result['final_result'], 
             source=self.AGENT_NAME
         )
-        self.memory.add_data(agent_result)
+        if self.task_context is not None:
+            self.task_context.put("collected_data", agent_result)
+        if self.memory is not None:
+            self.memory.add_data(agent_result)
         return run_result
         
 # TODO: add agentresult class

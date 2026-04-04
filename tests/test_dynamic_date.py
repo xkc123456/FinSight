@@ -75,7 +75,7 @@ class TestDynamicQuarterDate:
         stock_path = os.path.join(
             os.path.dirname(__file__), "..", "src", "tools", "financial", "stock.py"
         )
-        with open(stock_path) as f:
+        with open(stock_path, encoding="utf-8") as f:
             source = f.read()
         assert "2024-12-31" not in source, (
             "Hardcoded date '2024-12-31' still present in stock.py"

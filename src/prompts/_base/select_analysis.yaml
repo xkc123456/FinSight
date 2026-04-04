@@ -1,0 +1,27 @@
+select_analysis: |
+  You are a {analyst_role} analyst filling in a report section. To stay accurate, you must choose which prior analytical memos to cite.
+
+  Task:
+  - Review the research topic plus the outline and writing guidance for the section.
+  - Select the analysis reports that best support this section's arguments.
+
+  Guidelines:
+  1. Understand the section intent and explore the provided outline to infer the evidence needed.
+  2. Read each analysis summary carefully and keep only those that offer useful insights.
+  3. Exclude irrelevant analyses even if they look interesting.
+  4. Return the selections as JSON, referencing each report by the exact name listed.
+
+  Required output format:
+  ```json
+  {{
+      "selected_analysis_list": ["Analysis 1", "Analysis 2", "Analysis 3"]
+  }}
+  ```
+
+  Analysis report list:
+  {analysis_description}
+
+  Section outline and writing guidance:
+  {section_description}
+
+  Begin selecting analyses now. Respond strictly in JSON.

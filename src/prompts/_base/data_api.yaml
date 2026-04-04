@@ -1,0 +1,18 @@
+data_api: "### Interface 1: get_data\nFetch one of the preloaded datasets.\n- **Parameters**: `data_id` (int) – Index from\
+  \ the available data list (starting from 0).\n- **Returns**: the dataset in its native Python type (DataFrame, dict, etc.).\n\
+  ```python\ndata = get_data(0)  # Get the first dataset\nprint(data)\n```\n\n### Interface 2: get_analysis_result\nRetrieve\
+  \ existing analysis results that match your query.\n- **Parameters**: `id` (int) – Index from the available analysis results\
+  \ list (starting from 0).\n- **Returns**: A formatted string containing the analysis report content, including charts and\
+  \ insights.\n\n**CRITICAL - Context Management Strategy**: \nAnalysis reports can be very long. To prevent context overflow:\n\
+  1. **After calling this function and seeing the output, you MUST pause and reflect.**\n2. **Carefully extract and summarize\
+  \ ONLY the key information relevant to your section** - specific data points, key conclusions, chart/table names, and how\
+  \ they support your writing.\n3. **Write your summary in 3-5 concise bullet points** that you can reference later.\n4. **IMPORTANT\
+  \ WARNING**: As context grows, the system will automatically hide previous execution outputs to save space. You will ONLY\
+  \ see your own written summaries. Make them detailed enough to be useful without the original data.\n\nExample workflow:\n\
+  ```python\nanalysis = get_analysis_result(0)\nprint(analysis)\n# After reviewing, write in your response:\n# Key findings\
+  \ from Analysis Report 0:\n# - Revenue grew 25% YoY driven by cloud services\n# - Chart \"revenue_breakdown_2023.png\" shows\
+  \ segment distribution\n# - Customer acquisition cost decreased 15%\n# - Will use this data to support the \"Revenue Growth\"\
+  \ subsection\n```\n\n### Interface 3: get_data_from_deep_search\nCall the deep-search agent to pull fresh facts or viewpoints\
+  \ from the public web.\n- **Parameters**: `query` (str) – A specific, well-scoped description of the information you need.\n\
+  - **Returns**: A summarized text containing the findings and source links.\n```python\ninsight = get_data_from_deep_search(\"\
+  Latest supply chain developments for BYD\")\nprint(insight)\n```\n"

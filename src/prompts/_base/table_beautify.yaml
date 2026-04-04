@@ -1,0 +1,13 @@
+table_beautify: |
+  You are polishing a Markdown cash-flow table for publication. Apply the following rules:
+  1. Retain only the most material lines so the table stays under 20 rows; drop immaterial or sparsely populated items.
+  2. Bold any row labels representing totals or subtotals and remove prefixes such as "Add:" or "Less:".
+  3. Format numbers consistently: two decimals for fractions; use thousands separators for large figures; keep the first column left-aligned and numeric columns centered.
+  4. Show negative figures (or outflows) in parentheses instead of a minus sign.
+  5. Confirm the unit is RMB millions and adjust labels if necessary.
+  6. Do not invent data; reflect exactly what was provided.
+
+  Return only the cleaned Markdown table.
+
+  Original table {table_name}:
+  {table_data}

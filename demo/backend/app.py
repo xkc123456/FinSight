@@ -18,8 +18,9 @@ root = str(Path(__file__).resolve().parents[2])
 sys.path.append(root)
 
 from src.config import Config
-from src.agents import DataCollector, DataAnalyzer, ReportGenerator
-from src.memory import Memory
+from src.core.pipeline import Pipeline, PipelineEvent
+from src.core.task_context import TaskContext
+from src.plugins import load_plugin
 from src.utils import setup_logger, get_logger
 import logging
 
@@ -56,15 +57,6 @@ class TaskList(BaseModel):
 
 class ExecutionRequest(BaseModel):
     resume: bool = False
-
-
-class AgentStatus(BaseModel):
-    agent_id: str
-    agent_type: str
-    task_content: str
-    status: str  # "pending", "running", "completed", "error"
-    priority: int
-    progress: Optional[str] = ""
 
 
 
@@ -589,7 +581,7 @@ async def websocket_logs(websocket: WebSocket):
         manager.disconnect(websocket)
 
 async def run_report_generation(resume: bool = False):
-    """Main report generation logic"""
+    """Main report generation logic — delegates to Pipeline."""
     try:
         # Prepare config
         config_dict = {
@@ -599,6 +591,8 @@ async def run_report_generation(resume: bool = False):
             "stock_code": current_config.stock_code,
             "reference_doc_path": current_config.reference_doc_path,
             "outline_template_path": current_config.outline_template_path,
+            "custom_collect_tasks": [t.content for t in current_tasks.collect_tasks],
+            "custom_analysis_tasks": [t.content for t in current_tasks.analysis_tasks],
             "llm_config_list": [
                 {
                     "model_name": llm.model_name,
@@ -609,19 +603,20 @@ async def run_report_generation(resume: bool = False):
                 for llm in current_config.llm_configs
             ]
         }
-        
+
+        # Set env vars so Pipeline / plugin.build_task_graph picks them up
+        os.environ.setdefault("DS_MODEL_NAME", current_config.ds_model_name)
+        os.environ.setdefault("VLM_MODEL_NAME", current_config.vlm_model_name)
+        os.environ.setdefault("EMBEDDING_MODEL_NAME", current_config.embedding_model_name)
+
         config = Config(config_dict=config_dict)
-        memory = Memory(config=config)
-        
+
         # Setup logger with WebSocket handler
         log_dir = os.path.join(config.working_dir, 'logs')
         logger = setup_logger(log_dir=log_dir, log_level=logging.INFO)
-        
-        # Add WebSocket handler for real-time log broadcasting
+
         ws_handler = WebSocketLogHandler(manager)
         ws_handler.setLevel(logging.INFO)
-        
-        # Add formatter and filter to match the standard logger format
         from src.utils.logger import AgentContextFilter
         ws_formatter = logging.Formatter(
             '%(asctime)s [%(levelname)s] [%(agent_name)s:%(agent_id)s] %(message)s',
@@ -629,234 +624,51 @@ async def run_report_generation(resume: bool = False):
         )
         ws_handler.setFormatter(ws_formatter)
         ws_handler.addFilter(AgentContextFilter())
-        
         logger.addHandler(ws_handler)
-        
-        if resume:
-            memory.load()
-            logger.info("Memory state loaded")
-        
-        # Broadcast start event
+
         await manager.broadcast({
             "type": "execution_start",
             "timestamp": datetime.now().isoformat()
         })
-        
-        # Prepare task list
-        tasks_to_run = []
-        
-        # Data collection tasks
-        for task in current_tasks.collect_tasks:
-            tasks_to_run.append({
-                'agent_class': DataCollector,
-                'task_input': {
-                    'input_data': {
-                        'task': f'Research target: {current_config.target_name} (ticker: {current_config.stock_code}), task: {task.content}'
-                    },
-                    'echo': True,
-                    'max_iterations': 5,
-                },
-                'agent_kwargs': {
-                    'use_llm_name': current_config.ds_model_name,
-                },
-                'priority': 1,
-                'task_id': task.id,
-                'task_content': task.content,
-            })
-        
-        # Analysis tasks
-        for task in current_tasks.analysis_tasks:
-            tasks_to_run.append({
-                'agent_class': DataAnalyzer,
-                'task_input': {
-                    'input_data': {
-                        'task': f'Research target: {current_config.target_name} (ticker: {current_config.stock_code})',
-                        'analysis_task': task.content
-                    },
-                    'echo': True,
-                    'max_iterations': 5,
-                },
-                'agent_kwargs': {
-                    'use_llm_name': current_config.ds_model_name,
-                    'use_vlm_name': current_config.vlm_model_name,
-                    'use_embedding_name': current_config.embedding_model_name,
-                },
-                'priority': 2,
-                'task_id': task.id,
-                'task_content': task.content,
-            })
-        
-        # Report generation task
-        tasks_to_run.append({
-            'agent_class': ReportGenerator,
-            'task_input': {
-                'input_data': {
-                    'task': f'Research target: {current_config.target_name} (ticker: {current_config.stock_code})',
-                    'task_type': 'company',
-                },
-                'echo': True,
-                'max_iterations': 5,
-            },
-            'agent_kwargs': {
-                'use_llm_name': current_config.ds_model_name,
-                'use_embedding_name': current_config.embedding_model_name,
-            },
-            'priority': 3,
-            'task_id': 'report_generation',
-            'task_content': 'Final Report Generation',
-        })
-        
-        # Create agents
-        agents_info = []
-        for task_info in tasks_to_run:
-            agent = await memory.get_or_create_agent(
-                agent_class=task_info['agent_class'],
-                task_input=task_info['task_input'],
-                resume=resume,
-                priority=task_info['priority'],
-                **task_info['agent_kwargs']
-            )
-            
-            actual_priority = task_info['priority']
-            for saved_task in memory.task_mapping:
-                if saved_task.get('agent_id') == agent.id:
-                    actual_priority = saved_task.get('priority', task_info['priority'])
-                    break
-            
-            agent_status = AgentStatus(
-                agent_id=agent.id,
-                agent_type=agent.AGENT_NAME,
-                task_content=task_info['task_content'],
-                status="pending",
-                priority=actual_priority
-            )
-            
-            agents_info.append({
-                'agent': agent,
-                'task_input': task_info['task_input'],
-                'priority': actual_priority,
-                'task_id': task_info['task_id'],
-                'status': agent_status
-            })
-            
-            execution_state["agents"].append(agent_status.dict())
-        
-        # Broadcast initial agent list
-        await manager.broadcast({
-            "type": "agents_initialized",
-            "agents": execution_state["agents"],
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Execute by priority
-        agents_info.sort(key=lambda x: x['priority'])
-        priority_groups = defaultdict(list)
-        for agent_info in agents_info:
-            priority_groups[agent_info['priority']].append(agent_info)
-        
-        sorted_priorities = sorted(priority_groups.keys())
-        
-        for priority in sorted_priorities:
-            if not execution_state["is_running"]:
-                logger.info("Execution stopped by user")
-                break
-            
-            execution_state["current_priority"] = priority
-            group = priority_groups[priority]
-            logger.info(f"Executing priority {priority} group ({len(group)} task(s))")
-            
+
+        # --- Pipeline-based execution ---
+        ctx = TaskContext.from_config(config)
+        plugin = load_plugin(ctx.target_type)
+
+        async def _on_pipeline_event(event: PipelineEvent) -> None:
+            """Forward pipeline events to WebSocket clients."""
             await manager.broadcast({
-                "type": "priority_start",
-                "priority": priority,
-                "timestamp": datetime.now().isoformat()
+                "type": f"agent_{event.type}",
+                "task_id": event.task_id,
+                "error": event.error,
+                "timestamp": datetime.now().isoformat(),
             })
-            
-            # Skip completed tasks
-            tasks_to_run_now = []
-            for agent_info in group:
-                agent = agent_info['agent']
-                if resume and memory.is_agent_finished(agent.id):
-                    logger.info(f"Agent {agent.id} already completed; skip")
-                    agent_info['status'].status = "completed"
-                    await update_agent_status(agent_info['status'])
-                    continue
-                tasks_to_run_now.append(agent_info)
-            
-            if not tasks_to_run_now:
-                logger.info(f"All tasks with priority {priority} are complete")
-                continue
-            
-            # Run tasks concurrently
-            async_tasks = []
-            for agent_info in tasks_to_run_now:
-                agent = agent_info['agent']
-                agent_info['status'].status = "running"
-                await update_agent_status(agent_info['status'])
-                
-                logger.info(f"Starting agent {agent.id}")
-                async_tasks.append(asyncio.create_task(
-                    agent.async_run(resume=resume, **agent_info['task_input'])
-                ))
-            
-            # Wait for completion
-            if async_tasks:
-                results = await asyncio.gather(*async_tasks, return_exceptions=True)
-                for agent_info, result in zip(tasks_to_run_now, results):
-                    agent = agent_info['agent']
-                    if isinstance(result, Exception):
-                        logger.error(f"Task failed: Agent {agent.id}, error: {result}")
-                        agent_info['status'].status = "error"
-                        agent_info['status'].progress = str(result)
-                    else:
-                        logger.info(f"Task finished: Agent {agent.id}")
-                        agent_info['status'].status = "completed"
-                    
-                    await update_agent_status(agent_info['status'])
-            
-            logger.info(f"Priority {priority} group finished")
-            await manager.broadcast({
-                "type": "priority_complete",
-                "priority": priority,
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        # Save final state
-        memory.save()
-        logger.info("All tasks completed")
-        
+
+        pipeline = Pipeline(
+            config=config,
+            max_concurrent=3,
+            on_event=_on_pipeline_event,
+        )
+
+        graph = await pipeline.run(ctx, resume=resume, plugin=plugin)
+        logger.info("All tasks completed. DAG: %s", graph.summary())
+
         execution_state["is_running"] = False
         execution_state["current_priority"] = None
-        
+
         await manager.broadcast({
             "type": "execution_complete",
             "timestamp": datetime.now().isoformat()
         })
-        
+
     except Exception as e:
-        logger.error(f"Execution error: {e}", exc_info=True)
+        logging.getLogger(__name__).error("Execution error: %s", e, exc_info=True)
         execution_state["is_running"] = False
         await manager.broadcast({
             "type": "execution_error",
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         })
-
-
-async def update_agent_status(status: AgentStatus):
-    """Update agent status and broadcast to clients"""
-    # Update in execution state
-    for agent in execution_state["agents"]:
-        if agent["agent_id"] == status.agent_id:
-            agent["status"] = status.status
-            agent["progress"] = status.progress
-            break
-    
-    # Broadcast update
-    await manager.broadcast({
-        "type": "agent_status_update",
-        "agent": status.dict(),
-        "timestamp": datetime.now().isoformat()
-    })
 
 
 if __name__ == "__main__":

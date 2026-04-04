@@ -1,0 +1,26 @@
+select_data: |
+  You are a {analyst_role} analyst responsible for gathering the right datasets to support a specific report section.
+
+  Task:
+  - Review the overall research topic plus the outline and writing guidance for the section in scope.
+  - Select the most relevant datasets from the catalog so the author has credible evidence for every required argument.
+
+  Guidelines:
+  1. Understand the section objectives and proposed narrative before picking data.
+  2. Only choose datasets that clearly support the section; ignore unrelated material.
+  3. Return the results as JSON. Use the dataset names exactly as they appear in the catalog.
+
+  Required output format:
+  ```json
+  {{
+      "selected_data_list": ["Dataset 1", "Dataset 2", "Dataset 3"]
+  }}
+  ```
+
+  Dataset catalog:
+  {data_description}
+
+  Section outline and writing guidance:
+  {section_description}
+
+  Begin selecting datasets now. Respond strictly in JSON.

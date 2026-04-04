@@ -1,8 +1,96 @@
 import json
 import os
 import re
+from typing import Optional
+
 import yaml
+from pydantic import BaseModel, Field, field_validator
+
 from src.utils import AsyncLLM
+
+
+# ------------------------------------------------------------------
+# Pydantic schema — validates the merged config dict
+# ------------------------------------------------------------------
+class LLMGenerationParams(BaseModel):
+    temperature: float = Field(0.5, ge=0.0, le=2.0)
+    max_tokens: int = Field(1000, ge=1)
+    top_p: float = Field(1.0, ge=0.0, le=1.0)
+
+    model_config = {"extra": "allow"}
+
+
+class LLMConfigItem(BaseModel):
+    model_name: str
+    api_key: str
+    base_url: str
+    generation_params: LLMGenerationParams = Field(default_factory=LLMGenerationParams)
+
+    model_config = {"extra": "allow"}
+
+
+class RateLimits(BaseModel):
+    search_engines: float = 1.0
+    financial_apis: float = 0.5
+    fred_api: float = 0.5
+    yfinance: float = 0.2
+
+    model_config = {"extra": "allow"}
+
+
+_VALID_TARGET_TYPES = {
+    "financial_company", "financial_industry", "financial_macro",
+    "general", "governance",
+    # legacy aliases kept for backward-compat
+    "company", "macro", "industry",
+}
+
+_VALID_LANGUAGES = {"zh", "en"}
+
+
+class ConfigSchema(BaseModel):
+    """Validates the merged user + default configuration."""
+
+    target_name: str = Field(min_length=1)
+    stock_code: str = ""
+    target_type: str
+    market: str = "A"
+    output_dir: str = "./outputs"
+    language: str = "zh"
+    save_note: Optional[str] = None
+    reference_doc_path: Optional[str] = None
+    outline_template_path: Optional[str] = None
+
+    custom_collect_tasks: list[str] = Field(default_factory=list)
+    custom_analysis_tasks: list[str] = Field(default_factory=list)
+
+    use_collect_data_cache: bool = True
+    use_analysis_cache: bool = True
+    use_report_outline_cache: bool = True
+    use_full_report_cache: bool = True
+    use_post_process_cache: bool = True
+
+    rate_limits: RateLimits = Field(default_factory=RateLimits)
+    llm_config_list: list[LLMConfigItem] = Field(default_factory=list)
+
+    model_config = {"extra": "allow"}
+
+    @field_validator("target_type")
+    @classmethod
+    def _check_target_type(cls, v: str) -> str:
+        if v not in _VALID_TARGET_TYPES:
+            raise ValueError(
+                f"target_type must be one of {sorted(_VALID_TARGET_TYPES)}, got {v!r}"
+            )
+        return v
+
+    @field_validator("language")
+    @classmethod
+    def _check_language(cls, v: str) -> str:
+        if v not in _VALID_LANGUAGES:
+            raise ValueError(f"language must be one of {sorted(_VALID_LANGUAGES)}, got {v!r}")
+        return v
+
 
 class Config:
     def __init__(self, config_file_path=None, config_dict={}):
@@ -19,6 +107,9 @@ class Config:
         
         # load from dict
         self.config.update(config_dict)
+
+        # Validate merged config
+        self._validated = ConfigSchema.model_validate(self.config)
         
         self._set_dirs()
         self._set_llms()

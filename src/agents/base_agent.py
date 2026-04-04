@@ -38,6 +38,7 @@ class BaseAgent:
         enable_code = True,
         memory = None,
         agent_id: str = None,
+        task_context = None,
     ):
         self.config = config
         self.name = self.AGENT_NAME
@@ -64,13 +65,16 @@ class BaseAgent:
         self.use_llm_name = use_llm_name
         self.llm = self.config.llm_dict[use_llm_name]
         self.memory = memory
+        self.task_context = task_context
+        self.checkpoint_mgr = None  # set by Pipeline when using new core
         
         if tools is None or tools == []:
             self._set_default_tools()
         else:
             self.tools = tools
-        for tool in self.tools:
-            self.memory.add_dependency(tool.id, self.id)
+        if self.memory is not None:
+            for tool in self.tools:
+                self.memory.add_dependency(tool.id, self.id)
         self.current_task_data = {}
         self.current_checkpoint = {}
         self._resume_state: Dict[str, Any] | None = None
@@ -83,6 +87,13 @@ class BaseAgent:
     def _set_default_tools(self):
         return []
 
+    _LANGUAGE_DISPLAY = {"zh": "Chinese (中文)", "en": "English"}
+
+    def _get_language_display_name(self) -> str:
+        """Return human-readable language name for prompts."""
+        lang = self.config.config.get("language", "zh")
+        return self._LANGUAGE_DISPLAY.get(lang, lang)
+
     def _get_persist_extra_state(self) -> Dict[str, Any]:
         """Hook for subclasses to persist additional state."""
         return {}
@@ -90,16 +101,50 @@ class BaseAgent:
     def _load_persist_extra_state(self, state: Dict[str, Any]):
         """Hook for subclasses to restore extra state."""
         return
+
+    # ------------------------------------------------------------------
+    # Phase-based execution (new core)
+    # ------------------------------------------------------------------
+    async def _run_phases(
+        self,
+        phases: list[tuple[str, Any]],
+        start_from: str | None = None,
+    ) -> None:
+        """Execute a sequence of named phases with automatic checkpointing.
+
+        Args:
+            phases: List of ``(phase_name, async_callable)`` pairs.
+            start_from: If set, skip phases until this name is reached
+                        (used for checkpoint resumption).
+        """
+        started = start_from is None
+        for name, fn in phases:
+            if not started:
+                if name == start_from:
+                    started = True
+                else:
+                    continue
+            self.logger.info(f"[{self.AGENT_NAME}] Phase: {name}")
+            await fn()
+            if self.checkpoint_mgr is not None:
+                self.checkpoint_mgr.save_agent(
+                    self.id, name, self._get_checkpoint_state()
+                )
+
+    def _get_checkpoint_state(self) -> dict:
+        """Return state dict for phase-level checkpointing. Override in subclass."""
+        return {}
     
     @classmethod
     async def from_checkpoint(
         cls,
         config: Config,
-        memory,
-        agent_id: str,
+        memory=None,
+        agent_id: str = '',
         checkpoint_name: str = 'latest.pkl',
         tools: Optional[list] = None,
         restored_agents: Optional[Dict[str, 'BaseAgent']] = None,
+        task_context=None,
         **kwargs
     ) -> Optional['BaseAgent']:
         """Restore an agent from a checkpoint."""
@@ -198,7 +243,8 @@ class BaseAgent:
             agent_id=agent_id,
             use_llm_name=use_llm_name,
             tools=tools,
-            **{k: v for k, v in kwargs.items() if k != 'use_llm_name'}
+            task_context=task_context,
+            **{k: v for k, v in kwargs.items() if k not in ('use_llm_name', 'task_context')}
         )
         
         # Restore runtime state
@@ -419,7 +465,8 @@ class BaseAgent:
                     break
         if target_tool is None:
             self.logger.warning(f"No available tools for tool_name: {tool_name}")
-            self.memory.add_log(self.id, None, kwargs, [], error=True, note=f"No available tools for tool_name: {tool_name}")
+            if self.memory is not None:
+                self.memory.add_log(self.id, None, kwargs, [], error=True, note=f"No available tools for tool_name: {tool_name}")
             return []
 
         bridge = get_async_bridge()
@@ -448,7 +495,8 @@ class BaseAgent:
                     kwargs['task'] = self.current_task_data['task']
                 response = bridge.run_async(target_tool.async_run(input_data=kwargs))
                 response = response['final_result']
-                self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
+                if self.memory is not None:
+                    self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
                 return response
             elif issubclass(type(target_tool), Tool):
                 response = bridge.run_async(target_tool.api_function(**kwargs))
@@ -461,15 +509,18 @@ class BaseAgent:
                     display_note += f"-{i}. Name: {item.name}\nSource: {item.source}\n"
                 print(f"\n\n{display_note}\n\n", file=sys.stdout, flush=True)
 
-                self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
+                if self.memory is not None:
+                    self.memory.add_log(target_tool.id, target_tool.type, kwargs, response, error=False, note=f"Tool {target_tool.name} executed successfully")
                 return data_list
             else:
                 self.logger.warning(f"Unknown tools: {tool_name}")
-                self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Unknown tools: {tool_name}")
+                if self.memory is not None:
+                    self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Unknown tools: {tool_name}")
                 return []
         except Exception as e:
             self.logger.error(f"Tool {tool_name} execution failed: {e}", exc_info=True)
-            self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Tool {tool_name} executed failed: {e}")
+            if self.memory is not None:
+                self.memory.add_log(self.id, target_tool.type, kwargs, [], error=True, note=f"Tool {tool_name} executed failed: {e}")
             return []
     
     def _get_api_descriptions(self) -> str:
@@ -588,7 +639,8 @@ class BaseAgent:
             state=current_state,
             checkpoint_name=checkpoint_name,
         )
-        self.memory.save()
+        if self.memory is not None:
+            self.memory.save()
         
         return return_dict
 

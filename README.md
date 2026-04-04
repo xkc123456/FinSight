@@ -773,53 +773,45 @@ await self.save(
 
 ```
 outputs/<target_name>/
-├── memory/
-│   └── memory.pkl           # Global memory state
+├── checkpoints/
+│   ├── pipeline.json         # Pipeline DAG state + TaskContext (human-readable)
+│   └── agents/               # Per-agent dill checkpoints
+│       ├── collect_0/
+│       ├── analyze_0/
+│       └── report/
 ├── agent_working/
 │   ├── agent_data_collector_xxx/
-│   │   └── .cache/latest.pkl
 │   ├── agent_data_analyzer_xxx/
-│   │   ├── .cache/latest.pkl
-│   │   ├── .cache/charts.pkl
-│   │   └── images/
 │   └── agent_report_generator_xxx/
-│       └── .cache/
-│           ├── outline_latest.pkl
-│           ├── section_0.pkl
-│           └── report_latest.pkl
 └── logs/
 ```
 
 ### Controlling Resume
 
-```python
+```bash
 # Resume from checkpoints (default)
-asyncio.run(run_report(resume=True))
+python run_report.py --config my_config.yaml
 
 # Fresh start (ignores checkpoints)
-asyncio.run(run_report(resume=False))
+python run_report.py --config my_config.yaml --no-resume
+
+# Inspect DAG without executing
+python run_report.py --config my_config.yaml --dry-run
 ```
 
-### Memory Data Flow
+### TaskContext Data Flow
 
 ```python
-from src.memory import Memory
+from src.core.task_context import TaskContext
 
-memory = Memory(config=config)
-memory.load()  # Load from checkpoint
+ctx = TaskContext.from_config(config)
 
-# Access collected data
-data_list = memory.get_collect_data()
+# Agents write artifacts via put()
+ctx.put("collected_data", tool_result)
 
-# Access analysis results
-analyses = memory.get_analysis_result()
-
-# Semantic search
-relevant = await memory.retrieve_relevant_data(
-    query="revenue trends",
-    top_k=10,
-    embedding_model="text-embedding-v3"
-)
+# Read artifacts
+data_list = ctx.get("collected_data")      # List[ToolResult]
+analyses = ctx.get("analysis_results")     # List[AnalysisResult]
 ```
 
 </details>
@@ -827,19 +819,16 @@ relevant = await memory.retrieve_relevant_data(
 <details>
 <summary><b>📚 Complete Code Examples</b></summary>
 
-### Example 1: Custom Company Analysis
+### Example 1: Full Pipeline (Recommended)
 
 ```python
 import asyncio
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
 from src.config import Config
-from src.memory import Memory
-from src.agents import DataCollector, DataAnalyzer, ReportGenerator
+from src.core.pipeline import Pipeline
+from src.core.task_context import TaskContext
+from src.plugins import load_plugin
 
-async def analyze_company():
+async def run():
     config = Config(
         config_file_path='my_config.yaml',
         config_dict={
@@ -849,73 +838,44 @@ async def analyze_company():
             'language': 'en',
         }
     )
-    
-    memory = Memory(config=config)
-    
-    # Run analysis
-    analyzer = DataAnalyzer(
-        config=config, memory=memory,
-        use_llm_name=os.getenv("DS_MODEL_NAME"),
-        use_vlm_name=os.getenv("VLM_MODEL_NAME"),
-        use_embedding_name=os.getenv("EMBEDDING_MODEL_NAME")
-    )
-    
-    await analyzer.async_run(
-        input_data={
-            'task': 'Apple Inc. Investment Research',
-            'analysis_task': 'Analyze iPhone vs Services revenue'
-        },
-        max_iterations=15,
-        enable_chart=True
-    )
-    
-    # Generate report
-    generator = ReportGenerator(config=config, memory=memory,
-        use_llm_name=os.getenv("DS_MODEL_NAME"),
-        use_embedding_name=os.getenv("EMBEDDING_MODEL_NAME"))
-    
-    await generator.async_run(
-        input_data={'task': 'Apple Inc. Investment Research'},
-        enable_chart=True
-    )
+    ctx = TaskContext.from_config(config)
+    plugin = load_plugin(ctx.target_type)
+    pipeline = Pipeline(config=config, max_concurrent=3)
+    graph = await pipeline.run(ctx, plugin=plugin)
+    print(f"Done. DAG: {graph.summary()}")
 
-asyncio.run(analyze_company())
+asyncio.run(run())
 ```
 
-### Example 2: General Deep Research
+### Example 2: Single Agent Debugging
 
 ```python
-async def deep_research(query: str):
-    config = Config(config_dict={
-        'target_name': query,
-        'target_type': 'general',
-        'language': 'en',
-    })
-    
-    memory = Memory(config=config)
-    
-    # Auto-generate analysis tasks
-    tasks = await memory.generate_analyze_tasks(
-        query=query,
+import asyncio
+import os
+from src.config import Config
+from src.core.task_context import TaskContext
+from src.agents import DataAnalyzer
+
+async def debug_analyzer():
+    config = Config(config_file_path='my_config.yaml')
+    ctx = TaskContext.from_config(config)
+    # Optionally load artifacts from a previous run
+    # ctx.load_artifacts_from("outputs/.../checkpoints/pipeline.json")
+
+    analyzer = DataAnalyzer(
+        config=config,
+        task_context=ctx,
         use_llm_name=os.getenv("DS_MODEL_NAME"),
-        max_num=5
+        use_vlm_name=os.getenv("VLM_MODEL_NAME"),
+        use_embedding_name=os.getenv("EMBEDDING_MODEL_NAME"),
     )
-    
-    for task in tasks:
-        analyzer = DataAnalyzer(config=config, memory=memory, ...)
-        await analyzer.async_run(
-            input_data={'task': query, 'analysis_task': task},
-            enable_chart=False
-        )
-    
-    generator = ReportGenerator(config=config, memory=memory, ...)
-    await generator.async_run(
-        input_data={'task': query},
-        enable_chart=False,
-        add_introduction=False
+    await analyzer.async_run(
+        input_data={'task': 'Apple Inc.', 'analysis_task': 'Revenue analysis'},
+        max_iterations=10,
+        enable_chart=True,
     )
 
-asyncio.run(deep_research("Impact of AI on healthcare in 2024"))
+asyncio.run(debug_analyzer())
 ```
 
 </details>
