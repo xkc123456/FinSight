@@ -232,7 +232,12 @@ class Pipeline:
                     await self._emit("task_completed", tid)
                     logger.task_done(tid)
 
-            logger.dag_state(graph.summary())
+            # 全局进度条
+            summary = graph.summary()
+            done_count = sum(1 for s in summary.values() if s == "done")
+            total_count = len(summary)
+            logger.progress(done_count, total_count, label="Pipeline Progress")
+            logger.dag_state(summary)
             self.checkpoint_mgr.save_pipeline(graph, ctx)
 
     async def _run_node(
