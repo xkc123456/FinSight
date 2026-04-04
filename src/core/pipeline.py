@@ -18,9 +18,10 @@ from src.core.task_context import TaskContext
 from src.core.task_graph import AgentResult, AgentStatus, TaskGraph, TaskNode, TaskState
 from src.plugins import load_plugin
 from src.plugins.base_plugin import ReportPlugin
+from src.utils.logger import get_logger
 from src.utils.prompt_loader import PromptLoader
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 # ------------------------------------------------------------------
@@ -125,12 +126,14 @@ class Pipeline:
         if self.lite:
             all_collect = all_collect[:2]
             all_analyze = all_analyze[:1]
-            logger.info("Lite mode: capped to %d collect, %d analyze tasks",
-                        len(all_collect), len(all_analyze))
+            logger.warning("Lite mode: capped to %d collect, %d analyze tasks",
+                           len(all_collect), len(all_analyze))
 
-        logger.info(
-            "Tasks — collect: %d, analyze: %d", len(all_collect), len(all_analyze)
-        )
+        logger.section("Task Plan")
+        logger.info("Collect tasks (%d): %s", len(all_collect),
+                     ", ".join(all_collect))
+        logger.info("Analyze tasks (%d): %s", len(all_analyze),
+                     ", ".join(all_analyze))
 
         graph = plugin.build_task_graph(
             self.config, task_context, all_collect, all_analyze,
@@ -147,9 +150,10 @@ class Pipeline:
         if resume:
             restored = self.checkpoint_mgr.restore_pipeline(graph, task_context)
             if restored:
-                logger.info("Resumed from checkpoint.")
+                logger.info("📂 Resumed from checkpoint.")
                 await self._repopulate_artifacts(graph, task_context)
 
+        logger.section("Pipeline Execution")
         await self._execute_graph(graph, task_context)
         self.checkpoint_mgr.save_pipeline(graph, task_context)
         return graph
@@ -199,6 +203,7 @@ class Pipeline:
                 if node.task_id in running:
                     continue
                 node.state = TaskState.RUNNING
+                logger.task_start(node.task_id)
                 await self._emit("task_started", node.task_id)
                 running[node.task_id] = asyncio.create_task(
                     self._run_node(node, ctx, sem, graph)
@@ -220,12 +225,13 @@ class Pipeline:
                 if exc is not None:
                     graph.mark_failed(tid, str(exc))
                     await self._emit("task_failed", tid, error=str(exc))
-                    logger.error("Task %s failed: %s", tid, exc)
+                    logger.task_fail(tid, str(exc))
                 else:
                     graph.mark_done(tid, task.result())
                     await self._emit("task_completed", tid)
+                    logger.task_done(tid)
 
-            logger.info("DAG state: %s", graph.summary())
+            logger.dag_state(graph.summary())
             self.checkpoint_mgr.save_pipeline(graph, ctx)
 
     async def _run_node(
@@ -242,7 +248,7 @@ class Pipeline:
             failed_deps = graph.get_failed_soft_deps(node.task_id)
             if failed_deps:
                 run_kwargs["missing_dependencies"] = failed_deps
-                logger.warning("%s: soft deps failed: %s", node.task_id, failed_deps)
+                logger.warning("%s: soft deps failed — %s", node.task_id, ", ".join(failed_deps))
 
             last_err: BaseException | None = None
             for attempt in range(1 + self.max_retries):
@@ -253,7 +259,7 @@ class Pipeline:
                     last_err = e
                     if attempt < self.max_retries:
                         logger.warning(
-                            "Retry %d/%d for %s: %s",
+                            "↻ Retry %d/%d for %s: %s",
                             attempt + 1, self.max_retries, node.task_id, e,
                         )
             raise last_err  # type: ignore[misc]

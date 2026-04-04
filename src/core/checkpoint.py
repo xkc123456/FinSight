@@ -9,7 +9,9 @@ from typing import Any, Optional
 
 import dill
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+
+logger = get_logger()
 
 CHECKPOINT_VERSION = 2
 

@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.plugins.base_plugin import ReportPlugin
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+
+logger = get_logger()
 
 # Maps target_type → ReportPlugin subclass (populated lazily).
 _PLUGIN_REGISTRY: dict[str, type[ReportPlugin]] = {}

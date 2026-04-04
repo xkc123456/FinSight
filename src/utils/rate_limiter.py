@@ -11,7 +11,9 @@ import logging
 import time
 from typing import Dict
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+
+logger = get_logger()
 
 
 class RateLimiter:

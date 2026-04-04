@@ -33,6 +33,11 @@ async def run_report(
     ctx = TaskContext.from_config(config)
     plugin = load_plugin(ctx.target_type)
 
+    logger.section(f"FinSight — {ctx.target_name}")
+    logger.info("Target type: %s  |  Language: %s  |  LLM: %s",
+                ctx.target_type, ctx.language_display_name, config.default_llm_name)
+    logger.info("Working dir: %s", config.working_dir)
+
     pipeline = Pipeline(
         config=config,
         max_concurrent=max_concurrent,
@@ -41,7 +46,8 @@ async def run_report(
     )
 
     graph = await pipeline.run(ctx, resume=resume, plugin=plugin)
-    logger.info(f"All tasks completed. DAG: {graph.summary()}")
+    logger.section("Pipeline Complete")
+    logger.dag_state(graph.summary())
 
 
 def main() -> None:
