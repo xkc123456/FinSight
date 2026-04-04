@@ -130,10 +130,8 @@ class Pipeline:
                            len(all_collect), len(all_analyze))
 
         logger.section("Task Plan")
-        logger.info("Collect tasks (%d): %s", len(all_collect),
-                     ", ".join(all_collect))
-        logger.info("Analyze tasks (%d): %s", len(all_analyze),
-                     ", ".join(all_analyze))
+        logger.numbered_list("📥 Collect Tasks", all_collect, color="\033[32m")
+        logger.numbered_list("📊 Analyze Tasks", all_analyze, color="\033[36m")
 
         graph = plugin.build_task_graph(
             self.config, task_context, all_collect, all_analyze,
@@ -141,10 +139,10 @@ class Pipeline:
         )
 
         if self.dry_run:
-            print("=== Dry Run ===")
-            print(f"Collect tasks ({len(all_collect)}): {all_collect}")
-            print(f"Analyze tasks ({len(all_analyze)}): {all_analyze}")
-            print(f"DAG:\n{json.dumps(graph.summary(), indent=2, ensure_ascii=False)}")
+            logger.section("Dry Run — DAG Preview")
+            logger.sub_section("DAG Topology")
+            for tid, state in graph.summary().items():
+                logger.info("  %-20s  %s", tid, state)
             return graph
 
         if resume:

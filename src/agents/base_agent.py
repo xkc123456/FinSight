@@ -128,7 +128,7 @@ class BaseAgent:
                     started = True
                 else:
                     continue
-            self.logger.info(f"[{self.AGENT_NAME}] Phase: {name}")
+            self.logger.phase(name)
             await fn()
             if self.checkpoint_mgr is not None:
                 self.checkpoint_mgr.save_agent(
@@ -511,11 +511,10 @@ class BaseAgent:
                 sources = [item.source for item in response]
                 data_list = [item.data for item in response]
                 sources = "\n".join(sources)
-                import sys
-                display_note = f"[Tool Result Overview] Gather {len(response)} Tool Results.\n"
+                display_note = f"Tool Result: {len(response)} items"
                 for i, item in enumerate(response):
-                    display_note += f"-{i}. Name: {item.name}\nSource: {item.source}\n"
-                print(f"\n\n{display_note}\n\n", file=sys.stdout, flush=True)
+                    display_note += f"\n  {i+1}. {item.name}  (source: {item.source})"
+                self.logger.info(display_note)
 
                 return data_list
             else:
@@ -580,25 +579,21 @@ class BaseAgent:
             current_round = 0
     
         while current_round < max_iterations+1:
-            self.logger.info(f"Iteration {current_round + 1}")
+            self.logger.iteration(current_round + 1, max_iterations, f"action → LLM")
             current_round += 1
             self.current_round = current_round
             response = await self.llm.generate(messages = conversation_history, stop=stop_words)
             action_type, action_content = self._parse_llm_response(response)
             if echo:
-                self.logger.info(f"LLM response this step: {response}")
-                self.logger.info("--------")
+                self.logger.debug("LLM response: %s", response)
             # Execute asynchronously
             action_result = await self._execute_action(action_type, action_content)
             action_result['llm_response'] = response
             if echo:
-                self.logger.info(f"Action result this step: {action_result['result']}")
-                self.logger.info("--------")
+                self.logger.debug("Action result: %s", action_result['result'])
             conversation_history.append({"role": "assistant", "content": action_result['llm_response']})
             conversation_history.append({"role": "user", "content": action_result['result']})
-            self.logger.debug("--Begin of Execution Result--")
-            self.logger.debug(action_result['result'])
-            self.logger.debug("--End of Execution Result--")
+            self.logger.debug("Execution result: %s", action_result['result'])
 
             # Save each iteration to support resume
             current_state = {

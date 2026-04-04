@@ -288,17 +288,17 @@ class DataAnalyzer(BaseAgent):
         
         # --- Main VLM evaluation loop ---
         for iteration in range(max_iterations):
-            self.logger.info(f"Iteration {iteration + 1}")
+            self.logger.iteration(iteration + 1, max_iterations, f"chart: {chart_name}")
             
             # --- Phase 1: generate/execute code (up to 3 retries) ---
             chart_code, chart_filepath = await self._generate_and_execute_code(
                 conversation_history
             )
-            self.logger.info(f"chart_code: {chart_code}")
-            self.logger.info(f"chart_filepath: {chart_filepath}")
+            self.logger.debug(f"chart_code: {chart_code}")
+            self.logger.debug(f"chart_filepath: {chart_filepath}")
             if not chart_filepath:
                 return last_successful_code, os.path.basename(last_successful_chart_path) if last_successful_chart_path else ""
-            self.logger.info("Image generation succeeded")
+            self.logger.info("✔ Chart image generated")
             last_successful_code = chart_code
             last_successful_chart_path = chart_filepath
 
@@ -320,7 +320,7 @@ class DataAnalyzer(BaseAgent):
                     }
                 ]
             )
-            self.logger.info("Image critic succeeded")
+            self.logger.info("✔ VLM critique passed")
             if 'finish' in critic_response.lower():
                 return last_successful_code, os.path.basename(last_successful_chart_path)
             
@@ -344,15 +344,13 @@ class DataAnalyzer(BaseAgent):
             (llm_response, chart_filepath) on success; otherwise (None, None).
         """
         for _ in range(3):  # internal retries
-            self.logger.info(f"Generating code, attempt {_ + 1}")
+            self.logger.info(f"Generating chart code (attempt {_ + 1}/3)")
             llm_response = await self.llm.generate(
                 messages=conversation_history,
                 # stop=['</execute']
             )
             action_type, action_content = self._parse_llm_response(llm_response)
-            self.logger.info("######################")
-            self.logger.info(f"action_type: {action_type}")
-            self.logger.info(f"action_content: {action_content}")
+            self.logger.debug(f"action_type={action_type}  action_content_len={len(action_content) if action_content else 0}")
 
             if action_type != "code":
                 conversation_history.append({"role": "assistant", "content": llm_response})
@@ -360,14 +358,14 @@ class DataAnalyzer(BaseAgent):
                 continue  # retry
 
             code_result = await self.code_executor.execute(code=action_content)
-            self.logger.info(f"code_result: {code_result}")
+            self.logger.debug(f"code_result: {code_result}")
             if code_result['error']:
                 conversation_history.append({"role": "assistant", "content": llm_response})
                 error_feedback = (
                     "Your code failed to execute. Here is the error output:\n\n"
                     f"{code_result['stdout']}\n{code_result['stderr']}\n\nPlease fix the code and try again."
                 )
-                self.logger.info(error_feedback)
+                self.logger.warning("Code execution error, retrying...")
                 conversation_history.append({"role": "user", "content": error_feedback})
                 continue  # retry
             
@@ -376,7 +374,7 @@ class DataAnalyzer(BaseAgent):
             if not chart_filenames:
                 conversation_history.append({"role": "assistant", "content": llm_response}) 
                 feedback = "Your code ran but did not save a PNG. Please add `plt.savefig('filename.png')`."
-                self.logger.info(feedback)
+                self.logger.warning("No PNG output detected, retrying...")
                 conversation_history.append({"role": "user", "content": feedback})
                 continue  # retry
 
@@ -387,7 +385,7 @@ class DataAnalyzer(BaseAgent):
             if not os.path.exists(chart_filepath):
                 conversation_history.append({"role": "assistant", "content": llm_response})
                 feedback = f"The file '{potential_chart_name}' was not found in the output directory. Please ensure the `plt.savefig()` path is correct."
-                self.logger.info(feedback)
+                self.logger.warning(f"Chart file not found: {potential_chart_name}, retrying...")
                 conversation_history.append({"role": "user", "content": feedback})
                 continue  # retry
             
@@ -467,7 +465,7 @@ class DataAnalyzer(BaseAgent):
             run_result = self._phase_state.get('run_result', {})
             final_result = run_result.get('final_result', '')
             report_title, report_content = self._parse_generated_report(final_result)
-            self.logger.info(f"report_title: {report_title}")
+            self.logger.info(f"Parsed report: {report_title}")
             self._phase_state['report_title'] = report_title
             self._phase_state['report_content'] = report_content
             self._phase_state['run_result']['report_title'] = report_title

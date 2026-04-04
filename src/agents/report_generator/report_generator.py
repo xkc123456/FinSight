@@ -379,12 +379,12 @@ class ReportGenerator(BaseAgent):
         for keyword, display_name in table_configs:
             target_item_list = [item for item in collect_data_list if keyword in item.name and stock_code in item.name]
             if len(target_item_list) == 0:
-                print(f"No {display_name} data found")
+                self.logger.debug(f"No {display_name} data found, skipping")
                 continue
             else:
                 table_data = target_item_list[0].data
                 if table_data is None:
-                    print(f"{display_name} data is empty, skip formatting")
+                    self.logger.debug(f"{display_name} data is empty, skipping")
                     continue
                     
                 if keyword in ["Income statement", "Balance sheet", "Cash-flow statement"]:
@@ -580,7 +580,7 @@ class ReportGenerator(BaseAgent):
         # Prepare executor for outline generation
         await self._prepare_executor()
 
-        self.logger.info(f"[Outline] Starting agentic outline generation (max {max_iterations} rounds)")
+        self.logger.info("Starting outline generation (max %d rounds)", max_iterations)
         
         # Create input data for outline generation
         outline_input_data = {
@@ -658,7 +658,7 @@ class ReportGenerator(BaseAgent):
                 start_from = state.get('resume_phase')
 
         async def _phase_outline():
-            self.logger.info("[Phase] Generating Report Outline")
+            self.logger.phase("Outline Generation")
             report = await self.generate_outline(
                 input_data,
                 max_iterations=max_iterations,
@@ -677,18 +677,18 @@ class ReportGenerator(BaseAgent):
                 },
                 checkpoint_name=checkpoint_name,
             )
-            self.logger.info(f"[Phase] Outline completed: sections={len(report.sections)}")
+            self.logger.info(f"Outline completed: {len(report.sections)} sections")
 
         async def _phase_sections():
             report = self._rg_state['report']
             start_index = self._rg_state.get('section_index_done', 0)
-            self.logger.info(f"[Phase] Begin generating sections (start={start_index})")
+            self.logger.phase("Section Writing", f"starting from #{start_index + 1}")
             for idx, section in enumerate(report.sections):
                 if idx < start_index:
                     continue
                 section_input_data = input_data.copy()
                 section_input_data['section_outline'] = section.outline
-                self.logger.info(f"[Phase] Section {idx+1}/{len(report.sections)} start")
+                self.logger.progress(idx, len(report.sections), "Sections")
                 await self._prepare_executor()
                 section_result = await super(ReportGenerator, self).async_run(
                     input_data=section_input_data,
@@ -711,7 +711,7 @@ class ReportGenerator(BaseAgent):
                     },
                     checkpoint_name=checkpoint_name,
                 )
-                self.logger.info(f"[Phase] Section {idx+1} done")
+                self.logger.info(f"Section {idx+1}/{len(report.sections)} done")
             await self.save(
                 state={
                     'resume_phase': 'replace_images',

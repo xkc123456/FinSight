@@ -280,7 +280,7 @@ class TestDryRun:
     def cfg(self, tmp_path):
         return _StubConfig(str(tmp_path))
 
-    async def test_dry_run_does_not_execute(self, cfg, capsys):
+    async def test_dry_run_does_not_execute(self, cfg):
         _FakeAgent.calls = []
         pipeline = Pipeline(config=cfg, dry_run=True)
 
@@ -295,9 +295,11 @@ class TestDryRun:
             ctx = TaskContext.from_config(cfg)
             graph = await pipeline.run(ctx, plugin=_StubPlugin())
 
-        captured = capsys.readouterr()
-        assert "Dry Run" in captured.out
-        assert _FakeAgent.calls == []  # nothing actually executed
+        # Dry-run must NOT execute any agents
+        assert _FakeAgent.calls == []
+        # All tasks remain in pending state
+        for tid, state in graph.summary().items():
+            assert state == "pending"
 
 
 # ------------------------------------------------------------------

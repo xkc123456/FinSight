@@ -261,6 +261,44 @@ class Logger:
         )
         self._emit_styled(raw_banner, plain_banner)
 
+    def sub_section(self, title: str):
+        """Print a lighter sub-section divider."""
+        w = max(len(title) + 4, 40)
+        colored = f"\n{_C.BOLD}{_C.BRIGHT_BLUE}── {title} {'─' * (w - len(title) - 4)}{_C.RESET}"
+        plain   = f"\n── {title} {'─' * (w - len(title) - 4)}"
+        self._emit_styled(colored, plain)
+
+    def numbered_list(self, title: str, items: list[str], color: str = _C.WHITE):
+        """Print a titled numbered list of items, one per line."""
+        w = max(len(title) + 4, 40)
+        header_c = f"{_C.BOLD}{color}{title}{_C.RESET} ({len(items)})"
+        header_p = f"{title} ({len(items)})"
+        lines_c, lines_p = [], []
+        for i, item in enumerate(items, 1):
+            idx_str = f"{_C.DIM}{i:>3}.{_C.RESET}"
+            lines_c.append(f"  {idx_str} {color}{item}{_C.RESET}")
+            lines_p.append(f"  {i:>3}. {item}")
+        colored = header_c + "\n" + "\n".join(lines_c)
+        plain   = header_p + "\n" + "\n".join(lines_p)
+        self._emit_styled(colored, plain)
+
+    def phase(self, name: str, detail: str = ""):
+        """Log an agent phase transition with a visual marker."""
+        msg = f"◆ {name}"
+        if detail:
+            msg += f"  {_C.DIM}({detail}){_C.RESET}"
+        plain = f"◆ {name}" + (f"  ({detail})" if detail else "")
+        # Use info-level through the normal log path
+        self.info(plain)
+
+    def iteration(self, current: int, total: int, detail: str = ""):
+        """Log a compact iteration counter."""
+        tag = f"[{current}/{total}]" if total else f"[{current}]"
+        msg = f"↻ Iteration {tag}"
+        if detail:
+            msg += f"  {detail}"
+        self.info(msg)
+
     def task_start(self, task_id: str, extra: str = ""):
         """Log a task start event with a visual marker."""
         msg = f"▶ Task Started: {task_id}"
