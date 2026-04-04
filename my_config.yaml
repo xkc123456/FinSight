@@ -1,7 +1,7 @@
-target_name: "商汤科技"
-stock_code: "00020.hk"
+target_name: "长江储存"
+stock_code: "600119"
 target_type: 'financial_company'  # financial_company, macro, industry, general
-output_dir: "./outputs/exp-v3"
+output_dir: "./outputs/v2"
 language: 'zh' # zh,en
 # reference_doc_path and outline_template_path are auto-resolved from the plugin.
 # Override here only if you want to use a custom template:
