@@ -137,10 +137,36 @@ class Pipeline:
             restored = self.checkpoint_mgr.restore_pipeline(graph, task_context)
             if restored:
                 logger.info("Resumed from checkpoint.")
+                await self._repopulate_artifacts(graph, task_context)
 
         await self._execute_graph(graph, task_context)
         self.checkpoint_mgr.save_pipeline(graph, task_context)
         return graph
+
+    # ------------------------------------------------------------------
+    # Checkpoint artifact recovery
+    # ------------------------------------------------------------------
+    async def _repopulate_artifacts(
+        self, graph: TaskGraph, ctx: TaskContext
+    ) -> None:
+        """Re-populate task_context artifacts from completed agents' checkpoints.
+
+        After a pipeline resume, the TaskContext is fresh — artifacts from
+        previously completed agents are lost.  This method restores each
+        completed agent from its own checkpoint and re-pushes its outputs
+        into *ctx* so that downstream agents see upstream data.
+        """
+        for node in graph._nodes.values():
+            if node.state != TaskState.DONE:
+                continue
+            try:
+                agent = await self._create_or_restore_agent(node, ctx)
+                agent._repopulate_task_context()
+            except Exception as e:
+                logger.warning(
+                    "Could not repopulate artifacts for %s: %s",
+                    node.task_id, e,
+                )
 
     # ------------------------------------------------------------------
     # Internal scheduling

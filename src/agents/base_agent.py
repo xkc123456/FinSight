@@ -84,12 +84,12 @@ class BaseAgent:
     def _set_default_tools(self):
         return []
 
-    _LANGUAGE_DISPLAY = {"zh": "Chinese (中文)", "en": "English"}
-
     def _get_language_display_name(self) -> str:
         """Return human-readable language name for prompts."""
+        if self.task_context is not None:
+            return self.task_context.language_display_name
         lang = self.config.config.get("language", "zh")
-        return self._LANGUAGE_DISPLAY.get(lang, lang)
+        return {"zh": "Chinese (中文)", "en": "English"}.get(lang, lang)
 
     def _get_persist_extra_state(self) -> Dict[str, Any]:
         """Hook for subclasses to persist additional state."""
@@ -127,6 +127,14 @@ class BaseAgent:
     def _get_checkpoint_state(self) -> dict:
         """Return state dict for phase-level checkpointing. Override in subclass."""
         return {}
+
+    def _repopulate_task_context(self) -> None:
+        """Re-push cached artifacts into task_context after checkpoint restore.
+
+        Called by Pipeline during resume so that downstream agents see
+        data produced by already-completed upstream agents.  Override in
+        subclasses that call ``task_context.put()`` during execution.
+        """
     
     @classmethod
     async def from_checkpoint(

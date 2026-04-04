@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Tuple
 import asyncio
 from src.agents.base_agent import BaseAgent
-from src.agents import DeepSearchAgent
+from src.agents.search_agent.search_agent import DeepSearchAgent
 from src.tools import ToolResult, get_tool_categories, get_tool_by_name
 
 
@@ -83,8 +83,7 @@ class DataCollector(BaseAgent):
             source=data_source,
         )
         self.collected_data_list.append(item)
-        if self.task_context is not None:
-            self.task_context.put("collected_data", item)
+        self.task_context.put("collected_data", item)
         try:
             self.logger.info(f"Saved collect result: {result_name} (source={data_source})")
         except Exception:
@@ -147,3 +146,9 @@ class DataCollector(BaseAgent):
 
     def _load_persist_extra_state(self, state: Dict[str, Any]):
         self.collected_data_list = state.get('collected_data_list', [])
+
+    def _repopulate_task_context(self) -> None:
+        """Re-push collected data into task_context after checkpoint restore."""
+        if self.task_context is not None:
+            for item in self.collected_data_list:
+                self.task_context.put("collected_data", item)

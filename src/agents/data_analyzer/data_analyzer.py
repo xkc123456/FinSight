@@ -6,7 +6,7 @@ import dill
 from typing import List, Dict, Any, Tuple
 import asyncio
 from src.agents.base_agent import BaseAgent
-from src.agents import DeepSearchAgent
+from src.agents.search_agent.search_agent import DeepSearchAgent
 from src.tools import ToolResult
 from src.utils import IndexBuilder
 from src.utils import image_to_base64
@@ -74,10 +74,8 @@ class DataAnalyzer(BaseAgent):
         self.tools = tool_list
 
     def _get_collect_data(self, exclude_type=None):
-        """Get collected data from task_context or memory."""
-        if self.task_context is not None:
-            return self.task_context.get("collected_data")
-        return []
+        """Get collected data from task_context."""
+        return self.task_context.get("collected_data")
 
     async def _prepare_executor(self):
         current_task_data = self.current_task_data
@@ -142,22 +140,10 @@ class DataAnalyzer(BaseAgent):
         return [{"role": "user", "content": prompt}]
     
     async def _format_collect_data(self, analysis_task, collect_data_list):
-        """
-        Format collected datasets into a readable string for the prompt.
-        """
-        # search_result = await self.memory.retrieve_relevant_data(analysis_task, top_k=10, embedding_model=self.use_embedding_name)
-        # formatted_data = ""
-        # if len(search_result) > 0:
-        #     for idx,item in enumerate(search_result):
-        #         formatted_data += f"Data (id:{idx}):\n{collect_data_list[idx].brief_str()}\n\n"
-        # else:
-        #     for idx,item in enumerate(collect_data_list):
-        #         formatted_data += f"Data (id:{idx}):\n{item.brief_str()}\n\n"
-
+        """Format collected datasets into a readable string for the prompt."""
         formatted_data = ""
-        for idx,item in enumerate(collect_data_list):
+        for idx, item in enumerate(collect_data_list):
             formatted_data += f"Data (id:{idx}):\n{item.brief_str()}\n\n"
-            
         return formatted_data
     
     async def _handle_report_action(self, action_content: str):
@@ -416,7 +402,29 @@ class DataAnalyzer(BaseAgent):
         return {}
 
     def _load_persist_extra_state(self, state: Dict[str, Any]):
-        pass
+        self._phase_state = state.get('phase_state', {})
+
+    def _repopulate_task_context(self) -> None:
+        """Re-push analysis result into task_context after checkpoint restore."""
+        if self.task_context is None:
+            return
+        phase_state = getattr(self, '_phase_state', {})
+        if not phase_state.get('finished'):
+            return
+        report_title = phase_state.get('report_title', '')
+        report_content = phase_state.get('report_content', '')
+        chart_code_mapping = phase_state.get('chart_code_mapping', {})
+        name_mapping = phase_state.get('name_mapping', {})
+        name_description_mapping = phase_state.get('name_description_mapping', {})
+        analysis_result = AnalysisResult(
+            title=report_title,
+            content=report_content,
+            image_save_dir=getattr(self, 'image_save_dir', ''),
+            chart_code_mapping=chart_code_mapping,
+            chart_name_mapping=name_mapping,
+            chart_name_description_mapping=name_description_mapping,
+        )
+        self.task_context.put("analysis_results", analysis_result)
         
     async def async_run(
         self, 
@@ -509,8 +517,7 @@ class DataAnalyzer(BaseAgent):
                 chart_name_description_mapping=name_description_mapping,
             )
             # Persist to task_context
-            if self.task_context is not None:
-                self.task_context.put("analysis_results", analysis_result)
+            self.task_context.put("analysis_results", analysis_result)
             await self.save(
                 state={'phase_state': self._phase_state, 'finished': True},
                 checkpoint_name=checkpoint_name,

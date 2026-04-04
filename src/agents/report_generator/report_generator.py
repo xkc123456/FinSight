@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import docx2pdf
 from src.agents.base_agent import BaseAgent
-from src.agents import DeepSearchAgent
+from src.agents.search_agent.search_agent import DeepSearchAgent
 from src.tools.web.web_crawler import ClickResult
 from src.tools import ToolResult, get_tool_categories, get_tool_by_name
 from src.agents.report_generator.report_class import Report, Section
@@ -83,16 +83,12 @@ class ReportGenerator(BaseAgent):
         self.tools = tool_list
 
     def _get_collect_data(self, exclude_type=None):
-        """Get collected data from task_context or memory."""
-        if self.task_context is not None:
-            return self.task_context.get("collected_data")
-        return []
+        """Get collected data from task_context."""
+        return self.task_context.get("collected_data")
 
     def _get_analysis_results(self):
-        """Get analysis results from task_context or memory."""
-        if self.task_context is not None:
-            return self.task_context.get("analysis_results")
-        return []
+        """Get analysis results from task_context."""
+        return self.task_context.get("analysis_results")
     
     async def _prepare_executor(self):
         """
@@ -635,12 +631,8 @@ class ReportGenerator(BaseAgent):
         self.enable_chart = enable_chart
         input_data['max_iterations'] = max_iterations
         
-        # Configure post-processing options based on target_type
-        target_type = self.config.config.get('target_type', 'general')
-        if add_introduction is None:
-            self.add_introduction = target_type not in ['general']
-        else:
-            self.add_introduction = add_introduction
+        # Configure post-processing options from plugin flags (passed via run_kwargs)
+        self.add_introduction = add_introduction if add_introduction is not None else True
         self.add_reference_section = add_reference_section
         
         # Shared mutable state across phases

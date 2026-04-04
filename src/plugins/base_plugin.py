@@ -99,6 +99,7 @@ class ReportPlugin(ABC):
         use_llm_name = config.default_llm_name
         use_vlm_name = config.default_vlm_name
         use_embedding_name = config.default_embedding_name
+        flags = self.get_post_process_flags()
 
         graph = TaskGraph()
         collector_ids: list[str] = []
@@ -146,6 +147,7 @@ class ReportPlugin(ABC):
                     },
                     "echo": True,
                     "max_iterations": 20,
+                    "enable_chart": flags.enable_chart,
                 },
                 soft_depends_on=list(collector_ids),
                 min_soft_deps=min(1, len(collector_ids)),
@@ -166,6 +168,9 @@ class ReportPlugin(ABC):
                 },
                 "echo": True,
                 "max_iterations": 20,
+                "enable_chart": flags.enable_chart,
+                "add_introduction": flags.add_introduction,
+                "add_reference_section": flags.add_references,
             },
             soft_depends_on=list(analyzer_ids),
             min_soft_deps=min(1, len(analyzer_ids)),
