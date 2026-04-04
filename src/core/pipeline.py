@@ -157,8 +157,8 @@ class Pipeline:
         into *ctx* so that downstream agents see upstream data.
         """
         repopulated = 0
-        total_done = sum(1 for n in graph._nodes.values() if n.state == TaskState.DONE)
-        for node in graph._nodes.values():
+        total_done = sum(1 for n in graph.iter_nodes() if n.state == TaskState.DONE)
+        for node in graph.iter_nodes():
             if node.state != TaskState.DONE:
                 continue
             try:
@@ -227,15 +227,16 @@ class Pipeline:
         async with sem:
             agent = await self._create_or_restore_agent(node, ctx)
 
+            run_kwargs = dict(node.run_kwargs)
             failed_deps = graph.get_failed_soft_deps(node.task_id)
             if failed_deps:
-                node.run_kwargs["missing_dependencies"] = failed_deps
+                run_kwargs["missing_dependencies"] = failed_deps
                 logger.warning("%s: soft deps failed: %s", node.task_id, failed_deps)
 
             last_err: BaseException | None = None
             for attempt in range(1 + self.max_retries):
                 try:
-                    await agent.async_run(**node.run_kwargs)
+                    await agent.async_run(**run_kwargs)
                     return AgentResult(node.task_id, AgentStatus.SUCCESS)
                 except Exception as e:
                     last_err = e

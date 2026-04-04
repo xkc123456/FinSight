@@ -30,7 +30,6 @@ def _make_config(llm_response: str):
     mock_llm.generate = AsyncMock(return_value=llm_response)
     cfg.llm_dict = {
         "deepseek-chat": mock_llm,
-        "deepseek/deepseek-chat-v3.1": mock_llm,
     }
     return cfg
 
@@ -126,7 +125,7 @@ class TestSelectDataByLLM:
         ctx = TaskContext.from_config(cfg)
         loader = _make_prompt_loader()
 
-        cfg.llm_dict["deepseek/deepseek-chat-v3.1"].generate = AsyncMock(return_value=None)
+        cfg.llm_dict["deepseek-chat"].generate = AsyncMock(return_value=None)
         result, desc = await select_data_by_llm(ctx, cfg, loader, "test")
         assert result == []
         assert desc == ""
@@ -139,7 +138,7 @@ class TestSelectAnalysisByLLM:
         ctx = TaskContext.from_config(cfg)
         loader = _make_prompt_loader()
 
-        cfg.llm_dict["deepseek/deepseek-chat-v3.1"].generate = AsyncMock(return_value=None)
+        cfg.llm_dict["deepseek-chat"].generate = AsyncMock(return_value=None)
         result, desc = await select_analysis_by_llm(ctx, cfg, loader, "test")
         assert result == []
         assert desc == ""

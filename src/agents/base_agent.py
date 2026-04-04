@@ -71,7 +71,6 @@ class BaseAgent:
                 DeprecationWarning,
                 stacklevel=2,
             )
-        self.memory = memory
         self.task_context = task_context
         self.checkpoint_mgr = None  # set by Pipeline when using new core
         

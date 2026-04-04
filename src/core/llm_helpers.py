@@ -121,7 +121,7 @@ async def select_data_by_llm(
     prompt_loader: PromptLoader,
     query: str,
     max_k: int = -1,
-    model_name: str = "deepseek/deepseek-chat-v3.1",
+    use_llm_name: str = "deepseek-chat",
 ) -> tuple[list, str]:
     """Use LLM to select relevant collected data for a query.
 
@@ -140,7 +140,7 @@ async def select_data_by_llm(
         and (DeepSearchResult is None or not isinstance(item, DeepSearchResult))
     ]
 
-    model = config.llm_dict[model_name]
+    model = config.llm_dict[use_llm_name]
     prompt = prompt_loader.get_prompt(
         "select_data",
         data_description=_format_data_description(collected),
@@ -170,7 +170,7 @@ async def select_analysis_by_llm(
     prompt_loader: PromptLoader,
     query: str,
     max_k: int = -1,
-    model_name: str = "deepseek/deepseek-chat-v3.1",
+    use_llm_name: str = "deepseek-chat",
 ) -> tuple[list, str]:
     """Use LLM to select relevant analysis results for a query.
 
@@ -186,7 +186,7 @@ async def select_analysis_by_llm(
         if isinstance(item, AnalysisResult)
     ]
 
-    model = config.llm_dict[model_name]
+    model = config.llm_dict[use_llm_name]
     prompt = prompt_loader.get_prompt(
         "select_analysis",
         analysis_description=_format_analysis_description(analyses),

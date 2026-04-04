@@ -9,7 +9,6 @@ from typing import Any, Optional
 class AgentStatus(Enum):
     SUCCESS = "success"
     FAILED = "failed"
-    PARTIAL = "partial"
 
 
 @dataclass
@@ -150,8 +149,14 @@ class TaskGraph:
             if tid in self._nodes:
                 self._nodes[tid].state = TaskState(info["state"])
                 error = info.get("error")
-                if error and info["state"] == TaskState.FAILED.value:
+                if info["state"] == TaskState.FAILED.value and error:
                     self._nodes[tid].result = AgentResult(tid, AgentStatus.FAILED, error)
+                elif info["state"] == TaskState.DONE.value:
+                    self._nodes[tid].result = AgentResult(tid, AgentStatus.SUCCESS)
+
+    def iter_nodes(self) -> list[TaskNode]:
+        """Return all nodes (for external iteration without accessing _nodes)."""
+        return list(self._nodes.values())
 
     def __len__(self) -> int:
         return len(self._nodes)
