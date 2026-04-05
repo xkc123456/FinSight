@@ -1,7 +1,7 @@
 target_name: "长江储存"
 stock_code: "600119"
 target_type: 'financial_company'  # financial_company, macro, industry, general
-output_dir: "./outputs/v2"
+output_dir: "./outputs/v2-lite"
 language: 'zh' # zh,en
 # reference_doc_path and outline_template_path are auto-resolved from the plugin.
 # Override here only if you want to use a custom template:
@@ -29,7 +29,7 @@ custom_analysis_tasks:
 
 use_collect_data_cache: True
 use_analysis_cache: True
-use_report_outline_cache: True
+use_report_outline_cache: False
 use_full_report_cache: True
 use_post_process_cache: True
 
@@ -40,7 +40,7 @@ llm_config_list:
     base_url: "${DS_BASE_URL}"
     generation_params:
       temperature: 0.7
-      max_tokens: 32768
+      max_tokens: 8192
       top_p: 0.95
   - model_name: "${EMBEDDING_MODEL_NAME}"
     api_key: "${EMBEDDING_API_KEY}"

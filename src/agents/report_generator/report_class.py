@@ -43,6 +43,19 @@ class Report:
     def _build_sections(self, all_structure: dict):
         if '__content__' in all_structure:
             del all_structure['__content__']
+        # Strip auto-generated reference/bibliography headings that LLMs
+        # sometimes append — the pipeline adds references in post-processing.
+        _ref_keys = [
+            k for k in all_structure
+            if re.match(
+                r'^(参考文献|参考数据来源|references?|bibliography|reference\s+data\s+sources?)$',
+                k.strip(), re.IGNORECASE,
+            )
+        ]
+        for k in _ref_keys:
+            del all_structure[k]
+        if len(all_structure) == 0:
+            raise ValueError("Report outline is empty after removing reference headings.")
         if len(all_structure) > 1:
             raise ValueError(
                 f"Report outline must contain exactly one top-level heading, "
@@ -51,6 +64,12 @@ class Report:
         self.title = list(all_structure.keys())[0]
         self.report_structure = all_structure[self.title]
         self._content = f'# {self.title}\n'
+
+        # If the top-level heading collapsed to a plain string (no H2/H3
+        # children), wrap it so the rest of the pipeline still works.
+        if isinstance(self.report_structure, str):
+            self.report_structure = {'__content__': self.report_structure}
+
         for section_title, section_outline in self.report_structure.items():
             if section_title == '__content__':
                 self._content += section_outline
