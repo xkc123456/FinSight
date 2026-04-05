@@ -77,6 +77,12 @@ class Report:
             else:
                 self.sections.append(Section(section_title, section_outline))
 
+        if len(self.sections) == 0:
+            raise ValueError(
+                "Report outline has no sections (no H2-level headings found). "
+                "The outline must contain at least one '## Section Title'."
+            )
+
     def _parse_outline(self, markdown_text: str) -> dict:
         """
         Parse Markdown outline text into a nested dictionary keyed by headings.

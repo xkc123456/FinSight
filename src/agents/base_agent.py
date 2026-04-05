@@ -511,10 +511,17 @@ class BaseAgent:
                 sources = [item.source for item in response]
                 data_list = [item.data for item in response]
                 sources = "\n".join(sources)
-                display_note = f"Tool Result: {len(response)} items"
+                import sys
+                display_note = f"[Tool Result Overview] Gathered {len(response)} Tool Result(s).\n"
                 for i, item in enumerate(response):
-                    display_note += f"\n  {i+1}. {item.name}  (source: {item.source})"
+                    display_note += f"  {i+1}. Name: {item.name}\n     Source: {item.source}\n"
+                print(f"\n{display_note}", file=sys.stdout, flush=True)
                 self.logger.info(display_note)
+                # Persist original ToolResult objects (with real source URLs)
+                # into task_context so _add_reference can use them.
+                if self.task_context is not None:
+                    for item in response:
+                        self.task_context.put("collected_data", item)
 
                 return data_list
             else:

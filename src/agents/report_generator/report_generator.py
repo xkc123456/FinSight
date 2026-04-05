@@ -83,8 +83,20 @@ class ReportGenerator(BaseAgent):
         self.tools = tool_list
 
     def _get_collect_data(self, exclude_type=None):
-        """Get collected data from task_context."""
-        return self.task_context.get("collected_data")
+        """Get collected data from task_context, with optional type filtering."""
+        from src.tools.web.base_search import SearchResult
+        from src.tools.web.web_crawler import ClickResult
+        from src.agents.search_agent.search_agent import DeepSearchResult
+        collected = self.task_context.get("collected_data")
+        # Always exclude DeepSearchResult (agent summary, not a real source)
+        collected = [item for item in collected if not isinstance(item, DeepSearchResult)]
+        if exclude_type:
+            for t in exclude_type:
+                if t == 'search':
+                    collected = [item for item in collected if not isinstance(item, SearchResult)]
+                elif t == 'click':
+                    collected = [item for item in collected if not isinstance(item, ClickResult)]
+        return collected
 
     def _get_analysis_results(self):
         """Get analysis results from task_context."""
