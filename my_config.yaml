@@ -1,5 +1,5 @@
-target_name: "长江储存"
-stock_code: "600119"
+target_name: "中微公司"
+stock_code: "688012"
 target_type: 'financial_company'  # financial_company, macro, industry, general
 output_dir: "./outputs/v2-lite"
 language: 'zh' # zh,en

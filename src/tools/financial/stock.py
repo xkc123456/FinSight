@@ -78,12 +78,18 @@ class StockBasicInfo(Tool):
         except Exception as e:
             print("Failed to fetch basic stock info", e)
             data = None
+        if market == "US":
+            _source = f"Yahoo Finance, {stock_code} company profile. https://finance.yahoo.com/quote/{stock_code}"
+        elif market == "HK":
+            _source = f"Eastmoney, {stock_code}.HK company profile. https://quote.eastmoney.com/hk/{stock_code}.html"
+        else:
+            _source = f"同花顺, {stock_code} 公司概况. https://basic.10jqka.com.cn/new/{stock_code}/"
         return [
             ToolResult(
                 name = f"{self.name}: {stock_code}",
                 description = f"Corporate profile for {stock_code}.",
                 data = data,
-                source="Xueqiu: Stock basic information. https://xueqiu.com/S"
+                source=_source
             )
         ]
 
@@ -196,12 +202,18 @@ class ShareHoldingStructure(Tool):
         except Exception as e:
             print("Failed to fetch shareholding structure", e)
             data = None
+        if market == "US":
+            _source = f"Yahoo Finance, {stock_code} holders. https://finance.yahoo.com/quote/{stock_code}/holders"
+        elif market == "HK":
+            _source = f"Eastmoney, {stock_code}.HK shareholding structure. https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code={stock_code}&type=web#/ShareHoldingAnalysis"
+        else:
+            _source = f"新浪财经, {stock_code} 股东研究. https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_StockHolder/stockid/{stock_code}.phtml"
         return [
             ToolResult(
                 name=f"{self.name} (ticker: {stock_code})",
                 description=self.description,
                 data=data,
-                source="Sina Finance: Shareholder structure. https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_StockHolder/stockid/600004.phtml"
+                source=_source
             )
         ]
 
@@ -252,12 +264,18 @@ class StockBaseInfo(Tool):
         except Exception as e:
             print("Failed to fetch stock valuation info", e)
             data = None
+        if market == "US":
+            _source = f"Yahoo Finance, {stock_code} valuation metrics. https://finance.yahoo.com/quote/{stock_code}"
+        elif market == "HK":
+            _source = f"Eastmoney, {stock_code}.HK valuation metrics. https://quote.eastmoney.com/hk/{stock_code}.html"
+        else:
+            _source = f"东方财富, {stock_code} 估值指标. https://quote.eastmoney.com/concept/{stock_code}.html"
         return [
             ToolResult(
                 name=f"{self.name} (ticker: {stock_code})",
                 description=self.description,
                 data=data,
-                source="Exchange filings: Equity valuation metrics."
+                source=_source
             )
         ]
 
@@ -302,11 +320,17 @@ class StockPrice(Tool):
         except Exception as e:
             print("Failed to fetch stock price history", e)
             data = None
+        if market == "US":
+            _source = f"Yahoo Finance, {stock_code} historical prices. https://finance.yahoo.com/quote/{stock_code}/history"
+        elif market == "HK":
+            _source = f"Eastmoney, {stock_code}.HK historical prices. https://quote.eastmoney.com/hk/{stock_code}.html"
+        else:
+            _source = f"东方财富, {stock_code} 日K线行情. https://quote.eastmoney.com/concept/{stock_code}.html"
         return [
             ToolResult(
                 name=f"{self.name} (ticker: {stock_code})",
                 description=self.description,
                 data=data,
-                source="Exchange trading data: OHLCV history."
+                source=_source
             )
         ]

@@ -32,7 +32,7 @@ class HuShen_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: CSI 300 daily data. https://finance.sina.com.cn/realstock/company/sz000300/nc.shtml"
+                    source="新浪财经, 沪深300指数日线行情. https://finance.sina.com.cn/realstock/company/sz000300/nc.shtml"
                 )
             ]
         else:
@@ -68,7 +68,7 @@ class HengSheng_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: Hang Seng Index daily data. https://stock.finance.sina.com.cn/hkstock/quotes/HSI.html."
+                    source="新浪财经, 恒生指数日线行情. https://stock.finance.sina.com.cn/hkstock/quotes/HSI.html"
                 )
             ]
         else:
@@ -103,7 +103,7 @@ class ShangZheng_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: SSE Composite daily data. https://finance.sina.com.cn/realstock/company/sz000001/nc.shtml"
+                    source="新浪财经, 上证综指日线行情. https://finance.sina.com.cn/realstock/company/sz000001/nc.shtml"
                 )
             ]
         else:
@@ -139,7 +139,7 @@ class NSDK_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: Nasdaq Composite daily data. https://stock.finance.sina.com.cn/usstock/quotes/.IXIC.html"
+                    source="新浪财经, 纳斯达克综合指数日线行情. https://stock.finance.sina.com.cn/usstock/quotes/.IXIC.html"
                 )
             ]
         else:

@@ -542,8 +542,19 @@ class ReportGenerator(BaseAgent):
             reference_str = f"## {ref_title}\n\n"
         for old_index, new_index in total_cited_dict.items():
             content = all_data[old_index]['content']
-            content = content.replace("\n", " ").replace("[PDF]", "")
-            reference_str += f"{new_index}. {content}\n"
+            content = content.replace("\n", " ").replace("[PDF]", "").strip()
+            # Extract URL from source string for cleaner formatting
+            url_match = re.search(r'(https?://\S+)', content)
+            if url_match:
+                url = url_match.group(1).rstrip('.').rstrip(',')
+                # Text before the URL is the description
+                desc = content[:url_match.start()].strip().rstrip('.,;:').strip()
+                if desc:
+                    reference_str += f"{new_index}. {desc}. {url}\n"
+                else:
+                    reference_str += f"{new_index}. {url}\n"
+            else:
+                reference_str += f"{new_index}. {content}\n"
         new_section = Section(ref_title, reference_str)
         new_section.set_content(reference_str)
         report.sections.append(new_section)

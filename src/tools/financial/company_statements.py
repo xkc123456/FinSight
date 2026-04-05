@@ -197,7 +197,7 @@ class BalanceSheet(Tool):
                 name = f"{self.name} (ticker: {stock_code})",
                 description = f"Balance sheet for ticker {stock_code}.",
                 data = data,
-                source=f"Eastmoney financials: balance sheet for {stock_code}. https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code={stock_code}#lrb-0."
+                source=f"东方财富, {stock_code} 资产负债表. https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code={stock_code}#zcfzb-0"
             )
         ]
 
@@ -296,7 +296,7 @@ class IncomeStatement(Tool):
                 name = f"{self.name} (ticker: {stock_code})",
                 description = f"Income statement for ticker {stock_code}.",
                 data = data,
-                source=f"iFinD/10jqka financials: income statement for {stock_code}. https://basic.10jqka.com.cn/new/{stock_code}/finance.html."
+                source=f"同花顺iFinD, {stock_code} 利润表. https://basic.10jqka.com.cn/new/{stock_code}/finance.html"
             )
         ]
 
@@ -394,6 +394,6 @@ class CashFlowStatement(Tool):
                 name = f"{self.name} (ticker: {stock_code})",
                 description = f"Cash-flow statement for ticker {stock_code}.",
                 data = data,
-                source=f"iFinD/10jqka financials: cash-flow statement for {stock_code}. https://basic.10jqka.com.cn/new/{stock_code}/finance.html."
+                source=f"同花顺iFinD, {stock_code} 现金流量表. https://basic.10jqka.com.cn/new/{stock_code}/finance.html"
             )
         ]
