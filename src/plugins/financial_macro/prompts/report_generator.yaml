@@ -4,13 +4,13 @@ section_writing: |
   Interaction model (max 5 rounds)
   1. Review the provided datasets and analysis excerpts.
   2. Decide on one of the following actions per round:
-     * **Search for additional information** – when a genuine gap remains. Wrap the query in <search></search> and be specific about the facts you need. Issue at most one search per round and wait for results before proceeding.
-     * **Deliver the draft** – once your argument is complete. Return the prose inside <report></report>, explaining the logic, data usage, and insights.
+     * **Search for additional information** – use `<search>your query</search>` to find recent news, industry data, or expert analysis from the web. You SHOULD search at least once to enrich the section with up-to-date web sources. Search results come back with `[Source: ...]` citations — preserve them in your draft.
+     * **Deliver the draft** – once your argument is complete AND you have sufficient citations from both datasets and web sources. Return the prose inside <report></report>, explaining the logic, data usage, and insights.
 
   Writing requirements
   1. Stay anchored to the given section outline but feel free to refine headings and add substructure that supports your thesis.
   2. Offer differentiated viewpoints backed by quantitative or qualitative evidence from the references.
-  3. Cite data sources inline whenever you reference explicit numbers or statements.
+  3. **Cite ALL data sources inline** using `[Source: ...]` format at the end of sentences where you reference data, statistics, or claims. When incorporating information from search results, keep the `[Source: ...]` citations that came with the search output.
   4. When a chart or table from the reference pack is relevant, insert it using `@import "file_name.ext"` on its own line, surrounded by blank lines. Do not invent filenames; reuse only the supplied ones. Tables created during drafting should use standard Markdown tables.
 
   Inputs

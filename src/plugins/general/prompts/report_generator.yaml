@@ -4,13 +4,14 @@ section_writing: |
   Interaction model (max {max_iterations} rounds)
   1. Review the provided datasets and analysis excerpts.
   2. Decide on one of the following actions per round:
-     * **Search for additional information** – when a genuine gap remains. Wrap the query in <search></search> and be specific about the facts you need. Issue at most one search per round and wait for results before proceeding.
-     * **Deliver the draft** – once your argument is complete. Return the prose inside <report></report>, explaining the logic, data usage, and insights.
+     * **Search for additional information** – use `<search>your query</search>` to find recent news, industry data, or expert analysis from the web. You SHOULD search at least once to enrich the section with up-to-date web sources beyond the preloaded datasets. The search results will come back with `[Source: ...]` citations that you should preserve and incorporate into your draft.
+     * **Write code** – use `<execute>` to call `get_data(id)`, `get_analysis_result(id)`, or `get_data_from_deep_search(query)` for data retrieval.
+     * **Deliver the draft** – once your argument is complete AND you have sufficient citations from both datasets and web sources. Return the prose inside `<report></report>`.
 
   Writing requirements
   1. Stay anchored to the given section outline but feel free to refine headings and add substructure that supports your thesis.
   2. Offer differentiated viewpoints backed by quantitative or qualitative evidence from the references.
-  3. Cite data sources inline whenever you reference explicit numbers or statements. Use the format `[Source: ...]` at the end of sentences where you reference data, statistics, or claims. Include the name of the webpage, dataset, report, or data source directly (e.g., `[source: Official Government Report]`, `[source: Academic Paper 2024]`, `[source: Industry Research Report]`).
+  3. **Cite ALL data sources inline**. Use the format `[Source: ...]` at the end of sentences where you reference data, statistics, or claims. Include the name of the webpage, dataset, report, or data source directly (e.g., `[Source: Company Annual Report 2024]`, `[Source: Industry Research Report]`). When incorporating information from search results, keep the `[Source: ...]` citations that came with the search output.
   4. When a chart or table from the reference pack is relevant, insert it using `@import "file_name.ext"` on its own line, surrounded by blank lines. Do not invent filenames; reuse only the supplied ones. Tables created during drafting should use standard Markdown tables.
 
   Inputs
@@ -32,8 +33,9 @@ section_writing_wo_chart: |
   Interaction model (max {max_iterations} rounds)
   1. Review the provided datasets and analysis excerpts.
   2. Decide on one of the following actions per round:
-     * **Search for additional information** – when a genuine gap remains OR when you need more sources to meet citation requirements. Wrap the query in <search></search> and be specific about the facts you need. Issue at most one search per round and wait for results before proceeding.
-     * **Deliver the draft** – once your argument is complete AND you have sufficient citations. Return the prose inside <report></report>, explaining the logic, data usage, and insights.
+     * **Search for additional information** – use `<search>your query</search>` to find recent news, industry data, or expert analysis from the web. You SHOULD search at least once to enrich the section with up-to-date web sources beyond the preloaded datasets. The search results will come back with `[Source: ...]` citations that you should preserve and incorporate into your draft.
+     * **Write code** – use `<execute>` to call `get_data(id)`, `get_analysis_result(id)`, or `get_data_from_deep_search(query)` for data retrieval.
+     * **Deliver the draft** – once your argument is complete AND you have sufficient citations from both datasets and web sources. Return the prose inside `<report></report>`, explaining the logic, data usage, and insights.
 
   ## CRITICAL: Section Context and Coherence
 
@@ -66,7 +68,7 @@ section_writing_wo_chart: |
      - If {target_language} is English (en): Prefer English-language sources when available. Translate non-English sources to English.
      - If {target_language} is Chinese (zh): You may use sources in any language, but present all findings in Chinese.
      - NEVER mix languages in the report body - keep content consistently in {target_language}
-  3. **Citation Format**: Use `[Source: ...]` at the end of sentences where you reference data, statistics, or claims. Include the name of the source directly in {target_language} (e.g., `[Source: Official Government Report]`, `[Source: Industry Analysis 2024]`).
+  3. **Citation Format**: Use `[Source: ...]` at the end of sentences where you reference data, statistics, or claims. Include the name of the source directly in {target_language} (e.g., `[Source: Official Government Report]`, `[Source: Industry Analysis 2024]`). When incorporating information from search results, keep the `[Source: ...]` citations that came with the search output — do NOT drop or rewrite them.
 
   ### Writing Quality Standards
   1. **Readability**:

@@ -82,6 +82,54 @@ class ReportGenerator(BaseAgent):
         ))
         self.tools = tool_list
 
+    @staticmethod
+    def _convert_deepsearch_citations(text: str) -> str:
+        """Convert ``[N]`` + ``## References`` from a deep-search report
+        into ``[Source: title]`` format that the citation resolver expects.
+
+        If no ``## References`` block is found the text is returned as-is.
+        """
+        # Locate the References section (## References or ## 参考 variants)
+        ref_pattern = re.compile(
+            r'^##\s*(?:References|参考文献|参考资料|参考来源)\s*$',
+            re.MULTILINE | re.IGNORECASE,
+        )
+        ref_match = ref_pattern.search(text)
+        if not ref_match:
+            return text
+
+        body = text[:ref_match.start()]
+        ref_block = text[ref_match.end():]
+
+        # Parse reference entries: [N] Title - URL  or  [N] Title URL  or  [N] Title
+        ref_map: dict[str, str] = {}
+        for m in re.finditer(
+            r'\[(\d+)\]\s*(.+?)(?:\s*[-–—]\s*(https?://\S+)|\s+(https?://\S+))?\s*$',
+            ref_block,
+            re.MULTILINE,
+        ):
+            num = m.group(1)
+            title = m.group(2).strip().rstrip('.-–—').strip()
+            ref_map[num] = title
+
+        if not ref_map:
+            return text
+
+        # Replace [N] (or [N,M,...]) in body with [Source: title] pairs
+        def _replace_cite(m: re.Match) -> str:
+            nums = [n.strip() for n in m.group(1).split(',')]
+            parts = []
+            for n in nums:
+                title = ref_map.get(n)
+                if title:
+                    parts.append(f'[Source: {title}]')
+                else:
+                    parts.append(f'[{n}]')  # keep original if unmapped
+            return ''.join(parts)
+
+        converted = re.sub(r'\[(\d+(?:,\s*\d+)*)\]', _replace_cite, body)
+        return converted.rstrip()
+
     def _get_collect_data(self, exclude_type=None):
         """Get collected data from task_context, with optional type filtering."""
         from src.tools.web.base_search import SearchResult
@@ -139,7 +187,8 @@ class ReportGenerator(BaseAgent):
                 'task': current_task_data.get('task', ''),
                 'query': query
             }))
-            return output['final_result']
+            # Convert [N]+References to [Source: title] for citation resolver
+            return ReportGenerator._convert_deepsearch_citations(output['final_result'])
         
         self.code_executor.set_variable("get_data", _get_data)
         self.code_executor.set_variable("get_analysis_result", _get_analysis_result)
@@ -197,10 +246,13 @@ class ReportGenerator(BaseAgent):
 
     async def _handle_search_action(self, action_content: str):
         search_result = await self.tools[0].async_run(input_data={'query': action_content})
+        # Convert [N]+References to [Source: title] so later citation
+        # resolution can match them to the actual SearchResult/ClickResult.
+        converted = self._convert_deepsearch_citations(search_result['final_result'])
         return {
             'action': 'search',
             'action_content': action_content,
-            'result': search_result['final_result'],
+            'result': converted,
             'continue': True,
         }
     
