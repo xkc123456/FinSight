@@ -437,6 +437,7 @@ class ReportGenerator(BaseAgent):
         """
         Append the reference-data section and replace placeholder citations.
         """
+        from src.tools.web.base_search import SearchResult
         collect_data_list = self._get_collect_data()  # only use data, without analysis result
         all_data = []
         for item in collect_data_list:
@@ -446,8 +447,14 @@ class ReportGenerator(BaseAgent):
                 url = item.link
                 title = item.name
                 content = f"{title}\n{url}"
+            elif isinstance(item, SearchResult) and hasattr(item, 'link') and item.link:
+                # For search results, use title + link as reference content
+                content = f"{item.name}\n{item.link}"
+            
+            # If source is empty, use name as fallback for both indexing and display
+            if not content or not content.strip():
+                content = item.name
 
-            # content = item.name + '\n' + item.link  # used for display citation
             if content not in [ii['content'] for ii in all_data]:
                 all_data.append({
                     'name': name,
@@ -455,9 +462,17 @@ class ReportGenerator(BaseAgent):
                 })
         self.logger.info(f"Total data for reference: {len(all_data)}")
         
+        if len(all_data) == 0:
+            self.logger.warning("No collected data for references, skipping reference section")
+            return report
+        
         total_corpus = [item['name'] for item in all_data]
         index = IndexBuilder(config=self.config, embedding_model=self.use_embedding_name, working_dir=self.working_dir)
         await index._build_index(total_corpus)
+
+        # Pattern matches both English and Chinese citation formats:
+        # [Source: ...], [source：...], [来源：...], [来源:...], [数据来源：...], [数据来源:...]
+        citation_pattern = r'\[(?:[Ss]ource|来源|数据来源)[：:]\s*(.*?)\]'
 
         total_cited_dict = {}
         for section in report.sections:
@@ -469,8 +484,8 @@ class ReportGenerator(BaseAgent):
             section_new_content = []
             for p_paragraph in section._content:
                 content = p_paragraph
-                # Locate citation placeholders
-                match_list = re.findall(r'\[[Ss]ource[：:]\s*(.*?)\]',content)
+                # Locate citation placeholders (English and Chinese formats)
+                match_list = re.findall(citation_pattern, content)
                 self.logger.debug(f"Match list: {match_list}")
                 for match_item in match_list:
                     # Use BM25/embedding search
@@ -498,20 +513,26 @@ class ReportGenerator(BaseAgent):
                         if idx not in total_cited_dict:
                             total_cited_dict[idx] = len(total_cited_dict) + 1
                     new_cite_list = [total_cited_dict[idx] for idx in cite_list]
-                    # Build the regex for replacement
-                    pattern_to_replace = r'\[[Ss]ource[：:]\s*' + re.escape(match_item) + r'\]'
+                    # Build the regex for replacement (match both English and Chinese prefixes)
+                    pattern_to_replace = r'\[(?:[Ss]ource|来源|数据来源)[：:]\s*' + re.escape(match_item) + r'\]'
                     content = re.sub(pattern_to_replace, f'[{",".join([str(item) for item in new_cite_list])}]', content)
 
                 section_new_content.append(content)
             section._content = section_new_content
 
-
-        reference_str = "## Reference Data Sources\n\n"
+        # Use language-appropriate section title
+        language = self.config.config.get('language', 'zh')
+        if language == 'zh':
+            ref_title = "参考数据来源"
+            reference_str = f"## {ref_title}\n\n"
+        else:
+            ref_title = "Reference Data Sources"
+            reference_str = f"## {ref_title}\n\n"
         for old_index, new_index in total_cited_dict.items():
             content = all_data[old_index]['content']
             content = content.replace("\n", " ").replace("[PDF]", "")
             reference_str += f"{new_index}. {content}\n"
-        new_section = Section('Reference Data Sources', reference_str)
+        new_section = Section(ref_title, reference_str)
         new_section.set_content(reference_str)
         report.sections.append(new_section)
         return report
