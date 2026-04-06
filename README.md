@@ -93,9 +93,9 @@ FinSight is still under development and there are many issues and room for impro
 - [x] VLM-powered chart generation + critique loops for clean visuals
 - [x] Checkpoint/resume for long-running tasks
 - [x] Interactive web demo (frontend + backend)
-- [ ] General-purpose research adaptation beyond finance
+- [x] General-purpose research adaptation beyond finance (general & governance plugins)
 - [x] Multi-market support (US equity + macro via yfinance/FRED)
-- [ ] Plugin system for custom tools and agents
+- [x] Plugin system for custom report types and prompt customization
 - [x] Code execution sandbox hardening (timeouts, restricted imports)
 - [x] Rate limiter for API calls
 - [x] CI/CD pipeline (GitHub Actions)
@@ -225,16 +225,16 @@ Full sample reports live in `assets/example_reports`.
   <img src="assets/architecture.jpg" alt="FinSight Architecture" width="800"/>
 </p>
 
-FinSight is a multi-stage, memory-centric pipeline: Data Collection → Analysis + VLM chart refinement → Report drafting & polishing → Rendering. Each agent runs in a shared variable space with resumable checkpoints.
+FinSight is a multi-stage, DAG-driven pipeline: Data Collection → Analysis + VLM chart refinement → Report drafting & polishing → Rendering. A central **Pipeline** orchestrator schedules agents concurrently via a task graph with hard/soft dependencies, while a thread-safe **TaskContext** serves as the shared data bus. Resumable checkpoints (JSON for pipeline state, dill for agent state) allow long-running jobs to survive interruptions.
 
 **Agent roster**
 
 | Agent | Purpose | Key inputs | Outputs | Default tools/skills |
 |-------|---------|------------|---------|----------------------|
-| 📥 Data Collector | Route and gather structured/unstructured data | Task, ticker/market, custom tasks | Normalized datasets in memory | DeepSearch Agent; all financial/macro/industry tools |
+| 📥 Data Collector | Route and gather structured/unstructured data | Task, ticker/market, custom tasks | Normalized datasets in TaskContext | DeepSearch Agent; all financial/macro/industry tools |
 | 🔍 Deep Search Agent | Multi-hop web search + content fetch with source validation | Task, query | Search snippets + crawled pages with citations | Exa search (free, no key); web page fetcher |
 | 🔬 Data Analyzer | Code-first analysis, charting, VLM critique | Task, analysis task, collected data | Analysis report, charts + captions | DeepSearch Agent; custom palette injection |
-| 📝 Report Generator | Outline → sections → polish → cover/reference → DOCX/PDF | Task, outlines, analysis/memory | Publication-ready report (MD/DOCX/PDF) | DeepSearch Agent; Pandoc + docx2pdf pipeline |
+| 📝 Report Generator | Outline → sections → polish → cover/reference → DOCX/PDF | Task, outlines, analysis results | Publication-ready report (MD/DOCX/PDF) | DeepSearch Agent; Pandoc + docx2pdf pipeline |
 
 **Tool library (high-level)**
 
@@ -409,33 +409,46 @@ llm_config_list:
 <details>
 <summary><b>✏️ Prompt System & Customization</b></summary>
 
-### Prompt Directory Structure
+### Prompt Directory Structure (v2.0 Layered Resolution)
+
+Prompts are resolved in a three-layer fallback: **Plugin → _base/ → Agent defaults**.
 
 ```
-src/agents/
-├── data_analyzer/prompts/
-│   ├── general_prompts.yaml      # For general research
-│   └── financial_prompts.yaml    # For financial reports
-├── report_generator/prompts/
-│   ├── general_prompts.yaml
-│   ├── financial_company_prompts.yaml
-│   ├── financial_macro_prompts.yaml
-│   └── financial_industry_prompts.yaml
-├── data_collector/prompts/
-│   └── prompts.yaml
-└── search_agent/prompts/
-    └── general_prompts.yaml
+src/
+├── prompts/_base/               # Shared base prompts (lowest priority)
+│   ├── data_api.yaml
+│   ├── outline_critique.yaml
+│   ├── outline_refinement.yaml
+│   ├── select_analysis.yaml
+│   ├── select_data.yaml
+│   ├── table_beautify.yaml
+│   └── vlm_critique.yaml
+├── plugins/                     # Plugin-specific overrides (highest priority)
+│   ├── financial_company/prompts/
+│   │   ├── data_analyzer.yaml
+│   │   ├── memory.yaml
+│   │   └── report_generator.yaml
+│   ├── financial_industry/prompts/
+│   ├── financial_macro/prompts/
+│   ├── general/prompts/
+│   └── governance/prompts/
+└── agents/                      # Agent-level fallback defaults
+    ├── data_collector/prompts/
+    └── search_agent/prompts/
 ```
 
 ### Using the Prompt Loader
 
 ```python
-from src.utils.prompt_loader import get_prompt_loader
+from src.utils.prompt_loader import PromptLoader
 
-# Load prompts for an agent
-loader = get_prompt_loader('data_analyzer', report_type='financial')
+# New layered loader: plugin → _base/ → agent fallback
+loader = PromptLoader.create_loader(
+    agent_name='data_analyzer',
+    plugin_name='financial_company',
+)
 
-# Get a specific prompt
+# Get a specific prompt (format variables are auto-merged with plugin defaults)
 prompt = loader.get_prompt('data_analysis',
     current_time="2024-12-01",
     user_query="Analyze revenue trends",
@@ -445,11 +458,26 @@ prompt = loader.get_prompt('data_analysis',
 
 # List all available prompts
 print(loader.list_available_prompts())
+
+# Backward-compatible convenience function
+from src.utils.prompt_loader import get_prompt_loader
+loader = get_prompt_loader('data_analyzer', report_type='financial_company')
 ```
 
 ### Creating Custom Prompts
 
-1. Create `src/agents/data_analyzer/prompts/my_custom_prompts.yaml`:
+Prompts are resolved via a 3-layer fallback: plugin overrides → shared `_base/` → agent defaults.
+
+1. **Plugin-level override** (highest priority): Create a YAML file in your plugin's `prompts/` directory:
+   ```
+   src/plugins/my_custom/prompts/data_analyzer.yaml
+   ```
+   
+2. **Shared base**: Add to `src/prompts/_base/<prompt_key>.yaml` for prompts shared across plugins.
+
+3. **Agent fallback** (lowest priority): Place in `src/agents/<agent_name>/prompts/`.
+
+Example plugin prompt override (`src/plugins/my_custom/prompts/data_analyzer.yaml`):
 
 ```yaml
 data_analysis: |
@@ -466,7 +494,7 @@ data_analysis: |
   All output must be in {target_language}.
 ```
 
-2. Set `target_type: 'my_custom'` in config to load your prompts.
+Register your plugin in `src/plugins/my_custom/plugin.py` and set `target_type: 'my_custom'` in config.
 
 ### Key Prompt Variables
 
@@ -717,10 +745,11 @@ class MyCustomAgent(BaseAgent):
     NECESSARY_KEYS = ['task', 'custom_param']
     
     def __init__(self, config, tools=None, use_llm_name="deepseek-chat",
-                 enable_code=True, memory=None, agent_id=None):
+                 enable_code=True, task_context=None, agent_id=None):
         if tools is None:
             tools = self._get_default_tools()
-        super().__init__(config, tools, use_llm_name, enable_code, memory, agent_id)
+        super().__init__(config, tools, use_llm_name, enable_code,
+                         task_context=task_context, agent_id=agent_id)
         
         # Load prompts
         from src.utils.prompt_loader import get_prompt_loader
@@ -748,8 +777,8 @@ class MyCustomAgent(BaseAgent):
 class ParentAgent(BaseAgent):
     def _set_default_tools(self):
         self.tools = [
-            MyCustomAgent(config=self.config, memory=self.memory),
-            DeepSearchAgent(config=self.config, memory=self.memory),
+            MyCustomAgent(config=self.config, task_context=self.task_context),
+            DeepSearchAgent(config=self.config, task_context=self.task_context),
         ]
 ```
 
