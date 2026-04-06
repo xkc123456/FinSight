@@ -561,20 +561,29 @@ class ReportGenerator(BaseAgent):
         from src.tools.web.base_search import SearchResult
         collect_data_list = self._get_collect_data()  # only use data, without analysis result
         all_data = []
+        seen_urls: set[str] = set()  # deduplicate by URL
         for item in collect_data_list:
             name = item.name + '\n' + item.description
             content = item.source
+            url = ""
             if isinstance(item, ClickResult):
                 url = item.link
                 title = item.name
                 content = f"{title}\n{url}"
             elif isinstance(item, SearchResult) and hasattr(item, 'link') and item.link:
+                url = item.link
                 # For search results, use title + link as reference content
                 content = f"{item.name}\n{item.link}"
             
             # If source is empty, use name as fallback for both indexing and display
             if not content or not content.strip():
                 content = item.name
+
+            # Deduplicate: skip if same URL already seen
+            if url and url in seen_urls:
+                continue
+            if url:
+                seen_urls.add(url)
 
             if content not in [ii['content'] for ii in all_data]:
                 all_data.append({
