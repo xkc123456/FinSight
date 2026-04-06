@@ -178,12 +178,12 @@ class DeepSearchAgent(BaseAgent):
                     'title': source_title,
                     'content_preview': result[:500] if len(result) > 500 else result
                 }
-            # add to memory / task_context
-            if click_result[0].link in self.link2name:
-                click_result[0].name = self.link2name[click_result[0].link]
-            if not ('error' in click_result[0].name.lower()):
-                if self.task_context is not None:
-                    self.task_context.put("collected_data", click_result[0])
+                # add to memory / task_context
+                if click_result[0].link in self.link2name:
+                    click_result[0].name = self.link2name[click_result[0].link]
+                if not ('error' in click_result[0].name.lower()):
+                    if self.task_context is not None:
+                        self.task_context.put("collected_data", click_result[0])
             self.logger.info(f"Click action done: url={action_content}")
             
         except Exception as e:
