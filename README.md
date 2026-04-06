@@ -232,7 +232,7 @@ FinSight is a multi-stage, memory-centric pipeline: Data Collection → Analysis
 | Agent | Purpose | Key inputs | Outputs | Default tools/skills |
 |-------|---------|------------|---------|----------------------|
 | 📥 Data Collector | Route and gather structured/unstructured data | Task, ticker/market, custom tasks | Normalized datasets in memory | DeepSearch Agent; all financial/macro/industry tools |
-| 🔍 Deep Search Agent | Multi-hop web search + content fetch with source validation | Task, query | Search snippets + crawled pages with citations | Serper/Google search; web page fetcher |
+| 🔍 Deep Search Agent | Multi-hop web search + content fetch with source validation | Task, query | Search snippets + crawled pages with citations | Exa search (free, no key); web page fetcher |
 | 🔬 Data Analyzer | Code-first analysis, charting, VLM critique | Task, analysis task, collected data | Analysis report, charts + captions | DeepSearch Agent; custom palette injection |
 | 📝 Report Generator | Outline → sections → polish → cover/reference → DOCX/PDF | Task, outlines, analysis/memory | Publication-ready report (MD/DOCX/PDF) | DeepSearch Agent; Pandoc + docx2pdf pipeline |
 
@@ -270,7 +270,7 @@ FinSight is a multi-stage, memory-centric pipeline: Data Collection → Analysis
 | Consumer confidence index | Industry | Data API | Sentiment series |
 | Total retail sales of consumer goods | Industry | Data API | Retail sales + YoY/MoM |
 | Bing web search (requests) | Web | Search | HTML-based Bing search |
-| Google Search Engine (Serper) | Web | Search | API Google search |
+| Exa Search Engine (MCP) | Web | Search | Free AI-powered web search (no API key needed) |
 | Bocha web search | Web | Search | CN-focused search API |
 | DuckDuckGo / Sogou search | Web | Search | Alternative HTML searches |
 | Financial site in-domain search (requests/playwright) | Web | Search | Scoped finance domains |
@@ -308,9 +308,11 @@ EMBEDDING_MODEL_NAME="text-embedding-v3"
 EMBEDDING_API_KEY="sk-your-key"
 EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-# Web Search (Optional)
-SERPER_API_KEY="your-serper-key"      # Google Search via Serper
-BOCHAAI_API_KEY="your-bocha-key"      # Bocha Search (Chinese-focused)
+# Web Search
+# Default: Exa Search via MCP (free, no API key needed — works out of the box)
+# Optional alternatives:
+# SERPER_API_KEY="your-serper-key"    # Google Search via Serper (paid)
+# BOCHAAI_API_KEY="your-bocha-key"    # Bocha Search (Chinese-focused)
 ```
 
 ### Using Aggregator Endpoints

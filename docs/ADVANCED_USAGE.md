@@ -112,9 +112,11 @@ EMBEDDING_MODEL_NAME="text-embedding-v3"
 EMBEDDING_API_KEY="sk-your-embedding-key"
 EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-# ===== Web Search APIs (Optional) =====
-SERPER_API_KEY="your-serper-key"      # Google Search via Serper
-BOCHAAI_API_KEY="your-bocha-key"      # Bocha Search (Chinese-focused)
+# ===== Web Search =====
+# Default: Exa Search via MCP (free, no API key needed — works out of the box)
+# Optional alternatives:
+# SERPER_API_KEY="your-serper-key"    # Google Search via Serper (paid)
+# BOCHAAI_API_KEY="your-bocha-key"    # Bocha Search (Chinese-focused)
 ```
 
 **Using Aggregator Endpoints (OpenRouter/AIHubMix)**:

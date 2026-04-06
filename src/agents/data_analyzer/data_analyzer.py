@@ -73,6 +73,75 @@ class DataAnalyzer(BaseAgent):
         ))
         self.tools = tool_list
 
+    @staticmethod
+    def _convert_deepsearch_citations(text: str) -> str:
+        """Convert deep-search ``[N]`` citations into ``[Source: title]``."""
+        ref_match = re.search(
+            r'^##\s*(?:References|\u53c2\u8003\u6587\u732e|\u53c2\u8003\u8d44\u6599\u6765\u6e90)\s*$',
+            text,
+            re.MULTILINE | re.IGNORECASE,
+        )
+        if not ref_match:
+            return text
+
+        body = text[:ref_match.start()]
+        ref_block = text[ref_match.end():]
+        ref_map: dict[str, str] = {}
+        for match in re.finditer(
+            r'\[(?:\u6ce8)?(\d+)\]\s*(.+?)(?:\s*[-\u2013\u2014]\s*(https?://\S+)|\s+(https?://\S+))?\s*$',
+            ref_block,
+            re.MULTILINE,
+        ):
+            ref_map[match.group(1)] = match.group(2).strip().rstrip(".-\u2013\u2014").strip()
+
+        if not ref_map:
+            return text
+
+        def _replace(match: re.Match) -> str:
+            numbers = [n.strip().lstrip("\u6ce8") for n in match.group(1).split(",")]
+            return "".join(
+                f"[Source: {ref_map[n]}]" if n in ref_map else f"[{n}]"
+                for n in numbers
+            )
+
+        return re.sub(
+            r'\[(?:\u6ce8)?(\d+(?:,\s*(?:\u6ce8)?\d+)*)\]',
+            _replace,
+            body,
+        ).rstrip()
+
+    @staticmethod
+    def _collect_web_sources(collected_data: list[Any]) -> list[tuple[str, str]]:
+        from src.tools.web.base_search import SearchResult
+        from src.tools.web.web_crawler import ClickResult
+
+        seen_urls: set[str] = set()
+        sources: list[tuple[str, str]] = []
+        for item in collected_data:
+            if isinstance(item, (SearchResult, ClickResult)):
+                url = getattr(item, "link", "")
+                title = getattr(item, "name", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append((title, url))
+        return sources
+
+    @staticmethod
+    def _append_new_web_sources(
+        text: str,
+        sources: list[tuple[str, str]],
+        existing_urls: set[str],
+    ) -> str:
+        new_sources = [(title, url) for title, url in sources if url not in existing_urls]
+        if not new_sources:
+            return text
+
+        output = text.rstrip()
+        output += "\n\n---\n**Web sources discovered during this search (use `[Source: <title>]` to cite):**\n"
+        for title, url in new_sources:
+            output += f"- {title}: {url}\n"
+        return output
+
     def _get_collect_data(self, exclude_type=None):
         """Get collected data from task_context."""
         return self.task_context.get("collected_data")
@@ -87,11 +156,16 @@ class DataAnalyzer(BaseAgent):
             from src.utils.async_bridge import get_async_bridge
             bridge = get_async_bridge()
             ds_agent = tool_list[0]
+            existing_urls = {
+                url for _, url in self._collect_web_sources(self._get_collect_data())
+            }
             output = bridge.run_async(ds_agent.async_run(input_data={
                 'task': current_task_data['task'],
                 'query': query
             }))
-            return output['final_result']
+            converted = self._convert_deepsearch_citations(output['final_result'])
+            all_sources = self._collect_web_sources(self._get_collect_data())
+            return self._append_new_web_sources(converted, all_sources, existing_urls)
         
         self.code_executor.set_variable("session_output_dir", self.image_save_dir)
         self.code_executor.set_variable("collect_data_list", [item.data for item in collect_data_list])
@@ -413,6 +487,7 @@ class DataAnalyzer(BaseAgent):
             return
         report_title = phase_state.get('report_title', '')
         report_content = phase_state.get('report_content', '')
+        report_content = self._convert_deepsearch_citations(report_content)
         chart_code_mapping = phase_state.get('chart_code_mapping', {})
         name_mapping = phase_state.get('name_mapping', {})
         name_description_mapping = phase_state.get('name_description_mapping', {})
@@ -469,6 +544,7 @@ class DataAnalyzer(BaseAgent):
             run_result = self._phase_state.get('run_result', {})
             final_result = run_result.get('final_result', '')
             report_title, report_content = self._parse_generated_report(final_result)
+            report_content = self._convert_deepsearch_citations(report_content)
             self.logger.info(f"Parsed report: {report_title}")
             self._phase_state['report_title'] = report_title
             self._phase_state['report_content'] = report_content

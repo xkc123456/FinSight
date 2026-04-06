@@ -258,6 +258,13 @@ class BaseAgent:
             task_context=task_context,
             **{k: v for k, v in kwargs.items() if k not in ('use_llm_name', 'task_context')}
         )
+
+        # Propagate task_context to sub-agent tools restored from checkpoint,
+        # since _restore_tools_from_checkpoint does not forward it.
+        if task_context is not None:
+            for tool in agent.tools:
+                if isinstance(tool, BaseAgent) and tool.task_context is None:
+                    tool.task_context = task_context
         
         # Restore runtime state
         agent._resume_state = state

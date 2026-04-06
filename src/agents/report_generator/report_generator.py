@@ -101,10 +101,10 @@ class ReportGenerator(BaseAgent):
         body = text[:ref_match.start()]
         ref_block = text[ref_match.end():]
 
-        # Parse reference entries: [N] Title - URL  or  [N] Title URL  or  [N] Title
+        # Parse reference entries: [N] Title - URL  or  [注N] Title  etc.
         ref_map: dict[str, str] = {}
         for m in re.finditer(
-            r'\[(\d+)\]\s*(.+?)(?:\s*[-–—]\s*(https?://\S+)|\s+(https?://\S+))?\s*$',
+            r'\[(?:注)?(\d+)\]\s*(.+?)(?:\s*[-–—]\s*(https?://\S+)|\s+(https?://\S+))?\s*$',
             ref_block,
             re.MULTILINE,
         ):
@@ -115,9 +115,9 @@ class ReportGenerator(BaseAgent):
         if not ref_map:
             return text
 
-        # Replace [N] (or [N,M,...]) in body with [Source: title] pairs
+        # Replace [N] / [注N] (or [N,M,...]) in body with [Source: title] pairs
         def _replace_cite(m: re.Match) -> str:
-            nums = [n.strip() for n in m.group(1).split(',')]
+            nums = [n.strip().lstrip('注') for n in m.group(1).split(',')]
             parts = []
             for n in nums:
                 title = ref_map.get(n)
@@ -127,7 +127,7 @@ class ReportGenerator(BaseAgent):
                     parts.append(f'[{n}]')  # keep original if unmapped
             return ''.join(parts)
 
-        converted = re.sub(r'\[(\d+(?:,\s*\d+)*)\]', _replace_cite, body)
+        converted = re.sub(r'\[(?:注)?(\d+(?:,\s*(?:注)?\d+)*)\]', _replace_cite, body)
         return converted.rstrip()
 
     def _get_collect_data(self, exclude_type=None):
@@ -154,6 +154,7 @@ class ReportGenerator(BaseAgent):
         """
         Prepare the code executor with data access functions for section writing.
         """
+        report_gen_self = self
         current_task_data = self.current_task_data
         tool_list = self.tools
         collect_data_list = self._get_collect_data(exclude_type=['search', 'click'])
@@ -183,12 +184,16 @@ class ReportGenerator(BaseAgent):
             from src.utils.async_bridge import get_async_bridge
             bridge = get_async_bridge()
             ds_agent = tool_list[0]
+            existing_urls = {u for _, u in report_gen_self._collect_web_sources()}
             output = bridge.run_async(ds_agent.async_run(input_data={
                 'task': current_task_data.get('task', ''),
                 'query': query
             }))
             # Convert [N]+References to [Source: title] for citation resolver
-            return ReportGenerator._convert_deepsearch_citations(output['final_result'])
+            converted = ReportGenerator._convert_deepsearch_citations(output['final_result'])
+            # Append real web source URLs discovered during this search
+            all_sources = report_gen_self._collect_web_sources()
+            return report_gen_self._append_source_list(converted, all_sources, existing_urls)
         
         self.code_executor.set_variable("get_data", _get_data)
         self.code_executor.set_variable("get_analysis_result", _get_analysis_result)
@@ -216,6 +221,16 @@ class ReportGenerator(BaseAgent):
         for idx, item in enumerate(analysis_result_list):
             data_info += f"**Analysis Report ID {idx}:**\n{item.brief_str()}\n\n"
         data_info += "\nYou can access these analysis reports using `get_analysis_result(analysis_result_id)` in your code.\n"
+
+        # Expose web sources collected during earlier phases so the section
+        # writer can cite them with [Source: <title>].
+        web_sources = self._collect_web_sources()
+        if web_sources:
+            data_info += "\n\n## Available Web Sources\n\n"
+            data_info += "The following web pages were retrieved during earlier research. "
+            data_info += "Cite them using `[Source: <title>]` when you reference information that aligns with these sources.\n\n"
+            for title, url in web_sources:
+                data_info += f"- **{title}**: {url}\n"
         
         if self.enable_chart:
             return [{
@@ -244,11 +259,53 @@ class ReportGenerator(BaseAgent):
                 )
             }]
 
+    def _collect_web_sources(self) -> list[tuple[str, str]]:
+        """Return [(title, url)] from SearchResult / ClickResult in task_context."""
+        from src.tools.web.base_search import SearchResult
+        from src.tools.web.web_crawler import ClickResult
+
+        collected = self.task_context.get("collected_data")
+        seen_urls: set[str] = set()
+        sources: list[tuple[str, str]] = []
+        for item in collected:
+            if isinstance(item, (SearchResult, ClickResult)):
+                url = getattr(item, 'link', '')
+                title = getattr(item, 'name', '')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append((title, url))
+        return sources
+
+    def _append_source_list(self, text: str, sources: list[tuple[str, str]],
+                            sources_before: set[str]) -> str:
+        """Append newly discovered web sources to *text* so the LLM can cite them.
+
+        Only sources whose URL was NOT in *sources_before* are appended.
+        """
+        new_sources = [(t, u) for t, u in sources if u not in sources_before]
+        if not new_sources:
+            return text
+
+        text = text.rstrip()
+        text += "\n\n---\n**Web sources discovered during this search (use `[Source: <title>]` to cite):**\n"
+        for title, url in new_sources:
+            text += f"- {title}: {url}\n"
+        return text
+
     async def _handle_search_action(self, action_content: str):
-        search_result = await self.tools[0].async_run(input_data={'query': action_content})
+        # Snapshot existing web source URLs so we can identify new ones
+        existing_urls = {u for _, u in self._collect_web_sources()}
+
+        search_result = await self.tools[0].async_run(input_data={
+            'task': self.current_task_data.get('task', ''),
+            'query': action_content,
+        })
         # Convert [N]+References to [Source: title] so later citation
         # resolution can match them to the actual SearchResult/ClickResult.
         converted = self._convert_deepsearch_citations(search_result['final_result'])
+        # Append real web source URLs discovered by the deep search agent
+        all_sources = self._collect_web_sources()
+        converted = self._append_source_list(converted, all_sources, existing_urls)
         return {
             'action': 'search',
             'action_content': action_content,

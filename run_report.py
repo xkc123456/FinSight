@@ -33,6 +33,13 @@ async def run_report(
     ctx = TaskContext.from_config(config)
     plugin = load_plugin(ctx.target_type)
 
+    # Warn early if the search API is unlikely to work
+    if not os.getenv("SERPER_API_KEY"):
+        logger.warning(
+            "SERPER_API_KEY is not set. Web search is disabled — "
+            "the report will lack web-sourced citations."
+        )
+
     logger.section(f"FinSight — {ctx.target_name}")
     logger.info("Target type: %s  |  Language: %s  |  LLM: %s",
                 ctx.target_type, ctx.language_display_name, config.default_llm_name)

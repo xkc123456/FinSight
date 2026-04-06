@@ -168,22 +168,30 @@ class SerperSearch(Tool):
         self.type = 'tool_search'
         api_key = os.getenv("SERPER_API_KEY", "")
         if not api_key:
-            print("Warning: SERPER_API_KEY is not set; SerperSearch requests may fail.")
+            import logging
+            logging.getLogger(__name__).warning(
+                "SERPER_API_KEY is not set. Web search will be disabled — "
+                "reports will lack web-sourced citations."
+            )
         self.headers = {
             'X-API-KEY': api_key,
             'Content-Type': 'application/json'
         }
+        self._warned_credits = False
 
     async def api_function(self, query: str) -> List[ToolResult]:
         """
-        Execute the legacy Bocha search via its HTTP endpoint.
+        Execute a Google search via the Serper API.
 
         Args:
             query: Search keywords.
 
         Returns:
-            A list of ToolResult entries populated from the API payload.
+            A list of SearchResult entries populated from the API payload.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         async with httpx.AsyncClient() as client:
             url = "https://google.serper.dev/search"
             payload = json.dumps({
@@ -192,30 +200,193 @@ class SerperSearch(Tool):
             
             response = await client.post(url, headers=self.headers, data=payload)
             response_data = response.json()
+
+            # Detect API-level errors (credits exhausted, invalid key, etc.)
+            if response.status_code != 200:
+                error_msg = response_data.get('message') or response_data.get('error') or f"HTTP {response.status_code}"
+                if not self._warned_credits:
+                    logger.error(
+                        "Serper search API error: %s (status %d). "
+                        "Web search will not work — check your SERPER_API_KEY and account credits.",
+                        error_msg, response.status_code,
+                    )
+                    self._warned_credits = True
+                return []
+
             result = response_data.get('organic', [])
-            if not result and 'error' in response_data:
-                print(f"Error from search API: {response_data['error']}")
-                return []
             result_list = []
-            if len(result) > 0:
-                for item in result:
-                    
-                    title = item['title']
-                    link = item['link']
-                    description = item['snippet']
-                    result_list.append(SearchResult(
-                        query=query,
-                        name=title,
-                        description=description,
-                        link=link,
-                        data=[{'title': title, 'link': link, 'description': description}],
-                        source=f'{title}\n{link}'
-                        # source=f"Google Search Engine, https://google.serper.dev/search?q={query}"
-                    ))
+            for item in result:
+                title = item['title']
+                link = item['link']
+                description = item['snippet']
+                result_list.append(SearchResult(
+                    query=query,
+                    name=title,
+                    description=description,
+                    link=link,
+                    data=[{'title': title, 'link': link, 'description': description}],
+                    source=f'{title}\n{link}'
+                ))
+            return result_list
+
+
+class ExaSearch(Tool):
+    """
+    Exa search via MCP protocol — free, no API key needed.
+    Connects to Exa's public MCP server at https://mcp.exa.ai/mcp
+    using the MCP Streamable HTTP transport.
+    """
+
+    MCP_ENDPOINT = "https://mcp.exa.ai/mcp"
+
+    def __init__(self):
+        super().__init__(
+            name="Exa Search Engine",
+            description="Free Exa-powered web search via MCP protocol (no API key needed).",
+            parameters=[{"name": "query", "type": "str", "description": "Search keywords", "required": True}],
+        )
+        self.backend = 'mcp'
+        self.type = 'tool_search'
+        self._session_id = None
+        self._request_id = 0
+        self._tool_name = None
+
+    def _next_id(self):
+        self._request_id += 1
+        return self._request_id
+
+    async def _mcp_post(self, client, method, params=None, is_notification=False):
+        """Send a JSON-RPC 2.0 request to the Exa MCP server."""
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+
+        body = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            body["params"] = params
+        if not is_notification:
+            body["id"] = self._next_id()
+
+        resp = await client.post(self.MCP_ENDPOINT, json=body, headers=headers)
+
+        sid = resp.headers.get("mcp-session-id")
+        if sid:
+            self._session_id = sid
+
+        if is_notification or resp.status_code == 202:
+            return None
+
+        content_type = resp.headers.get("content-type", "")
+        if "text/event-stream" in content_type:
+            return self._parse_sse(resp.text)
+        return resp.json()
+
+    @staticmethod
+    def _parse_sse(text):
+        """Extract the last JSON-RPC result from an SSE stream."""
+        result = None
+        for line in text.split("\n"):
+            if line.startswith("data:"):
+                data_str = line[5:].strip()
+                if not data_str:
+                    continue
+                try:
+                    parsed = json.loads(data_str)
+                    if isinstance(parsed, dict) and ("result" in parsed or "error" in parsed):
+                        result = parsed
+                except json.JSONDecodeError:
+                    continue
+        return result
+
+    async def _ensure_initialized(self, client):
+        """Perform MCP handshake if session not yet established."""
+        if self._session_id is not None:
+            return
+        await self._mcp_post(client, "initialize", {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "FinSight", "version": "2.0"}
+        })
+        await self._mcp_post(client, "notifications/initialized", is_notification=True)
+
+        # discover available tool name
+        tools_resp = await self._mcp_post(client, "tools/list")
+        if tools_resp and "result" in tools_resp:
+            for t in tools_resp["result"].get("tools", []):
+                if "search" in t.get("name", "").lower():
+                    self._tool_name = t["name"]
+                    break
+        if not self._tool_name:
+            self._tool_name = "web_search_exa"
+
+    async def api_function(self, query: str) -> List[ToolResult]:
+        """Execute a web search via the Exa MCP server."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                await self._ensure_initialized(client)
+
+                resp = await self._mcp_post(client, "tools/call", {
+                    "name": self._tool_name,
+                    "arguments": {"query": query, "numResults": 10}
+                })
+
+                if not resp:
+                    logger.error("Exa MCP: empty response for query '%s'", query)
+                    return []
+                if "error" in resp:
+                    err = resp["error"]
+                    logger.error("Exa MCP error: %s", err)
+                    # Reset session so next call re-initializes
+                    self._session_id = None
+                    return []
+
+                content_items = resp.get("result", {}).get("content", [])
+                result_list = []
+                for item in content_items:
+                    if item.get("type") != "text":
+                        continue
+                    text = item["text"]
+                    # Exa MCP returns results as structured text blocks
+                    # separated by "---", with fields like Title:, URL:, Highlights:
+                    for block in text.split("\n---\n"):
+                        block = block.strip()
+                        if not block:
+                            continue
+                        title = ""
+                        link = ""
+                        highlights = ""
+                        for line in block.split("\n"):
+                            if line.startswith("Title:"):
+                                title = line[len("Title:"):].strip()
+                            elif line.startswith("URL:"):
+                                link = line[len("URL:"):].strip()
+                            elif line.startswith("Highlights:"):
+                                highlights = line[len("Highlights:"):].strip()
+                            elif highlights and not any(
+                                line.startswith(p) for p in ("Published:", "Author:", "Score:")
+                            ):
+                                highlights += " " + line.strip()
+                        description = highlights or title
+                        if title or link:
+                            result_list.append(SearchResult(
+                                query=query,
+                                name=title,
+                                description=description,
+                                link=link,
+                                data=[{'title': title, 'link': link, 'description': description}],
+                                source=f'{title}\n{link}'
+                            ))
                 return result_list
-            else:
-                print(f"Error: Request failed with status code {response.status_code}")
-                return []
+        except Exception as e:
+            logger.error("Exa MCP search failed: %s", e)
+            self._session_id = None
+            return []
 
 
 class DuckDuckGoSearch(Tool):

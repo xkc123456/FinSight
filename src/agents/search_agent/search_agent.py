@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Tuple
 
 from src.agents.base_agent import BaseAgent
-from src.tools.web.search_engine_requests import BingSearch, BochaSearch, SerperSearch
+from src.tools.web.search_engine_requests import BingSearch, BochaSearch, SerperSearch, ExaSearch
 from src.tools.web.web_crawler import Click
 from src.tools.base import ToolResult
 
@@ -27,7 +27,7 @@ class DeepSearchAgent(BaseAgent):
     ):
         # Use search + click tools directly; no code interpreter required
         if tools is None:
-            tools = [SerperSearch(), Click()]
+            tools = [ExaSearch(), Click()]
         super().__init__(
             config=config,
             tools=tools,
@@ -120,7 +120,7 @@ class DeepSearchAgent(BaseAgent):
             for search_item in search_result:
                 if self.task_context is not None:
                     self.task_context.put("collected_data", search_item)
-            self.logger.info(f"Search action done: query={action_content}")
+            self.logger.info(f"Search action done: query={action_content}, results={len(search_result)}")
                 
         except Exception as e:
             result = f"Query `{action_content}` failed with error: {str(e)}. Please retry."
