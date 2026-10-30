@@ -1,0 +1,15 @@
+FinSight Pro / 玉兰融观 Pro
+Modified version date: 2026-10-30
+
+Upstream project: RUC-NLPIR/FinSight
+Upstream repository: https://github.com/RUC-NLPIR/FinSight
+Upstream authors retain their original copyright and attribution.
+
+This is an independent derivative version, not an official release of
+Renmin University of China or the upstream authors. Modifications include
+whole-report editing, financial writing constraints, deterministic pre-export
+quality gates, configuration, documentation and tests.
+
+The entire derivative work is distributed under GNU General Public License
+version 3. The original LICENSE file is retained unchanged. No trademark or
+endorsement by the upstream authors is claimed.

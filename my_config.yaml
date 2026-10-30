@@ -46,3 +46,6 @@ llm_config_list:
   - model_name: "${VLM_MODEL_NAME}"
     api_key: "${VLM_API_KEY}"
     base_url: "${VLM_BASE_URL}"
+# FinSight Pro: whole-document editing and deterministic pre-export acceptance
+pro_global_edit: true
+pro_quality_gate: true
