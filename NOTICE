@@ -8,9 +8,8 @@ Upstream repository: https://github.com/RUC-NLPIR/FinSight
 
 上游项目的全部知识产权——包括但不限于源代码、提示词（prompts）、文档、
 图表与论文成果——归原作者团队所有：
-Jiajie Jin (金佳杰), Yuyao Zhang (张誉瑶), Yimeng Xu (徐一鸣),
-Hongjin Qian (钱宏瑾), Yutao Zhu (朱余韬), Zhicheng Dou (窦志成)
-(RUC-NLPIR, 中国人民大学高瓴人工智能学院/信息学院).
+Jiajie Jin, Yuyao Zhang, Yimeng Xu, Hongjin Qian, Yutao Zhu, Zhicheng Dou
+(RUC-NLPIR, Renmin University of China).
 论文: FinSight: Towards Real-World Financial Deep Research, arXiv:2510.16844.
 
 All intellectual property in the upstream work — including but not limited to
