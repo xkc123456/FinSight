@@ -153,7 +153,7 @@ FinSight uses a two-layer configuration:
 
 1) `.env` — model endpoints & API keys  
 ```bash
-cp .env.example . .env
+cp .env.example .env
 # fill in DS_MODEL_NAME / API keys / base URLs
 ```
 
