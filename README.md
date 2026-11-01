@@ -1,6 +1,6 @@
 > **⚠️ 本仓库是修改版，不是官方发布。**
 > 基于 [RUC-NLPIR/FinSight](https://github.com/RUC-NLPIR/FinSight)（「玉兰·融观」）修改，修改日期 2026-10-30，改动说明见 [PRO_README.md](PRO_README.md)，权属与许可见 [NOTICE](NOTICE)。
-> 上游全部知识产权归原作者团队（金佳杰、张誉瑶、徐一鸣、钱宏瑾、朱余韬、窦志成，中国人民大学）所有。
+> 上游全部知识产权归原作者团队（Jiajie Jin, Yuyao Zhang, Yimeng Xu, Hongjin Qian, Yutao Zhu, Zhicheng Dou, Renmin University of China）所有。
 
 <div align="center">
 
