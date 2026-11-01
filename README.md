@@ -1,3 +1,7 @@
+> **⚠️ 本仓库是修改版，不是官方发布。**
+> 基于 [RUC-NLPIR/FinSight](https://github.com/RUC-NLPIR/FinSight)（「玉兰·融观」）修改，修改日期 2026-10-30，改动说明见 [PRO_README.md](PRO_README.md)，权属与许可见 [NOTICE](NOTICE)。
+> 上游全部知识产权归原作者团队（金佳杰、张誉瑶、徐一鸣、钱宏瑾、朱余韬、窦志成，中国人民大学）所有。
+
 <div align="center">
 
 <img src="assets/finsight-logo-v2.png" width="400">
@@ -46,7 +50,6 @@ https://github.com/user-attachments/assets/41963369-3dd4-4dfd-ad95-ef95cd092ebb
 
   <i>📄 Final Generated Report Example: The Development of Financial AI Agents (click pickture to read)</i>
 </div>
-
 
 
 
@@ -150,7 +153,7 @@ FinSight uses a two-layer configuration:
 
 1) `.env` — model endpoints & API keys  
 ```bash
-cp .env.example .env
+cp .env.example . .env
 # fill in DS_MODEL_NAME / API keys / base URLs
 ```
 
@@ -948,7 +951,7 @@ We conducted comprehensive evaluations comparing FinSight against leading commer
 
 ## 📜 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+上游仓库 LICENSE 文件为 GPL-3.0，**以 LICENSE 文件为准**（上游 README 中 "Apache 2.0" 的表述与 LICENSE 不一致，本仓库不沿用该表述）。本修改版（FinSight Pro）整体依 GNU GPL v3 发布，并按 GPL-3.0 第 5 条标注修改：保留原版权声明，声明修改内容与日期，衍生作品整体以 GPL-3.0 再授权，且未主张上游商标或背书。上游全部知识产权归原作者团队所有，详见 [NOTICE](NOTICE)。
 
 ---
 
@@ -977,6 +980,3 @@ If you find FinSight useful in your research, please cite our paper:
 - [AkShare](https://akshare.akfamily.xyz/) for financial data APIs
 - [eFinance](https://github.com/mpquant/efinance) for stock data
 - [Crawl4AI](https://github.com/unclecode/crawl4ai) for web crawling
-
-
-
